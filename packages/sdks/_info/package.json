@@ -1,0 +1,16 @@
+{
+  "name": "@openpanel/sdk-info",
+  "version": "0.0.1",
+  "main": "index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "catalog:"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "@openpanel/tsconfig": "workspace:*",
+    "typescript": "catalog:"
+  }
+}

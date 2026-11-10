@@ -1,0 +1,84 @@
+// Type-only `db -> core` edge: `import type` creates no runtime cycle.
+import type {
+  IClickhouseBotEvent,
+  IClickhouseEvent,
+  IClickhouseProfile,
+  INotificationPayload,
+} from '@openpanel/core';
+import type { CohortDefinition } from '@openpanel/core/modules/cohort/cohort.constants';
+import type { IImportConfig } from '@openpanel/core/modules/import/import.constants';
+import type { InsightPayload } from '@openpanel/core/modules/insight/insight.constants';
+import type { IIntegrationConfig } from '@openpanel/core/modules/integration/integration.constants';
+import type { INotificationRuleConfig } from '@openpanel/core/modules/notification/notification.constants';
+import type { IOrganizationAttributionStored } from '@openpanel/core/modules/onboarding/onboarding.constants';
+import type { IProjectAccessGrant } from '@openpanel/core/modules/organization/organization.constants';
+import type { IProjectFilters } from '@openpanel/core/modules/project/project.constants';
+import type {
+  ICustomEventItem,
+  IWidgetOptions,
+} from '@openpanel/core/modules/report/report.constants';
+
+declare global {
+  namespace PrismaJson {
+    type IPrismaImportConfig = IImportConfig;
+    type IPrismaNotificationRuleConfig = INotificationRuleConfig;
+    type IPrismaIntegrationConfig = IIntegrationConfig;
+    type IPrismaNotificationPayload = INotificationPayload;
+    type IPrismaProjectFilters = IProjectFilters[];
+    type IPrismaInviteProjectAccess = IProjectAccessGrant[];
+    type IPrismaOrganizationAttribution = IOrganizationAttributionStored;
+    type IPrismaProjectInsightPayload = InsightPayload;
+    type IPrismaWidgetOptions = IWidgetOptions;
+    type IPrismaClickhouseEvent = IClickhouseEvent;
+    type IPrismaClickhouseProfile = IClickhouseProfile;
+    type IPrismaClickhouseBotEvent = IClickhouseBotEvent;
+    type IPrismaCohortDefinition = CohortDefinition;
+    type IPrismaCustomEventItems = ICustomEventItem[];
+    // One ChatMessage row is one AI SDK `UIMessage`: `parts` is its parts
+    // array. Typed loosely so `ai` stays out of @openpanel/db; the assistant
+    // module narrows it.
+    type IPrismaUIMessageParts = unknown[];
+    type IPrismaChatMessageMetadata = Record<string, unknown>;
+    type IPrismaSubscriptionStatus =
+      | 'incomplete'
+      | 'incomplete_expired'
+      | 'trialing'
+      | 'active'
+      | 'past_due'
+      | 'canceled'
+      | 'unpaid'
+      | 'paused';
+    // Compact summary of the discount applied to the subscription, synced
+    // from Polar's embedded discount object so the dashboard can show it.
+    type IPrismaSubscriptionDiscount = {
+      id: string;
+      name: string;
+      type: 'percentage' | 'fixed';
+      // Set for percentage discounts (3000 = 30%).
+      basisPoints: number | null;
+      // Set for fixed discounts (minor units + currency).
+      amount: number | null;
+      currency: string | null;
+      duration: 'once' | 'forever' | 'repeating';
+      durationInMonths: number | null;
+    };
+    // Steps of the wind-down sequence, in order. The column stores the last
+    // step whose email was sent; `blocked` and `final_warning` also mean
+    // ingestion is rejected.
+    type IPrismaWindDownStep =
+      | 'expired_notice'
+      | 'stopping_soon'
+      | 'blocked'
+      | 'final_warning';
+    // Mirrors Polar's CustomerCancellationReason enum.
+    type IPrismaCancellationReason =
+      | 'too_expensive'
+      | 'missing_features'
+      | 'switched_service'
+      | 'unused'
+      | 'customer_service'
+      | 'low_quality'
+      | 'too_complex'
+      | 'other';
+  }
+}

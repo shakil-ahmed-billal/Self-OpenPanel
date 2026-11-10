@@ -1,0 +1,23 @@
+$DOMAIN_NAME {$SSL_CONFIG
+    encode gzip
+    
+    handle_path /api* {
+        reverse_proxy op-api:3000
+    }
+
+    reverse_proxy /* op-dashboard:3000
+}
+
+worker.$DOMAIN_NAME {$SSL_CONFIG
+    encode gzip
+
+    basic_auth {
+        admin $BASIC_AUTH_PASSWORD
+    }
+
+    # The queue dashboard lives at /bullboard on the worker. It also requires
+    # a dashboard login, so this basic_auth is a second lock, not the only one.
+    redir / /bullboard/
+
+    reverse_proxy op-worker:3000
+}

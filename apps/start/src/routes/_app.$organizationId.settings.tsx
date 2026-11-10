@@ -1,0 +1,150 @@
+import { zEditOrganization } from '@openpanel/core/modules/organization/organization.constants';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { createFileRoute } from '@tanstack/react-router';
+import { Building2Icon } from 'lucide-react';
+import { Controller, useForm } from 'react-hook-form';
+import { toast } from 'sonner';
+import type { z } from 'zod';
+import { EmptyState } from '@/components/empty-state';
+import { InputWithLabel, WithLabel } from '@/components/forms/input-with-label';
+import FullPageLoadingState from '@/components/full-page-loading-state';
+import { PageHeader } from '@/components/page-header';
+import DeleteOrganization from '@/components/settings/delete-organization';
+import { Button } from '@/components/ui/button';
+import { Combobox } from '@/components/ui/combobox';
+import { Widget, WidgetBody, WidgetHead } from '@/components/widget';
+import { handleError, useTRPC } from '@/integrations/trpc/react';
+import { createOrganizationTitle, PAGE_TITLES } from '@/utils/title';
+
+const validator = zEditOrganization;
+
+type IForm = z.infer<typeof validator>;
+
+export const Route = createFileRoute('/_app/$organizationId/settings')({
+  component: Component,
+  head: () => {
+    return {
+      meta: [
+        {
+          title: createOrganizationTitle(PAGE_TITLES.SETTINGS),
+        },
+      ],
+    };
+  },
+});
+
+function Component() {
+  const { organizationId } = Route.useParams();
+  const trpc = useTRPC();
+  const {
+    data: organization,
+    isLoading,
+    refetch,
+  } = useQuery(
+    trpc.organization.get.queryOptions({
+      organizationId,
+    })
+  );
+
+  if (isLoading) {
+    return <FullPageLoadingState />;
+  }
+
+  if (!organization) {
+    return (
+      <EmptyState
+        description="This workspace doesn't exist or you don't have access to it."
+        icon={Building2Icon}
+        title="Workspace not found"
+        variant="page"
+      />
+    );
+  }
+
+  const { register, handleSubmit, formState, reset, control } = useForm<IForm>({
+    defaultValues: {
+      id: organization.id,
+      name: organization.name,
+      timezone: organization.timezone ?? undefined,
+    },
+  });
+
+  const mutation = useMutation(
+    trpc.organization.update.mutationOptions({
+      onSuccess(res) {
+        toast('Organization updated', {
+          description: 'Your organization has been updated.',
+        });
+        reset({
+          ...res,
+          timezone: res.timezone!,
+        });
+        refetch();
+      },
+      onError: handleError,
+    })
+  );
+
+  return (
+    <div className="container p-8">
+      <PageHeader
+        className="mb-8"
+        description="Manage your workspace settings here"
+        title="Workspace settings"
+      />
+
+      <form
+        onSubmit={handleSubmit((values) => {
+          mutation.mutate(values);
+        })}
+      >
+        <Widget>
+          <WidgetHead className="flex items-center justify-between">
+            <span className="title">Details</span>
+          </WidgetHead>
+          <WidgetBody className="col gap-4">
+            <InputWithLabel
+              className="flex-1"
+              label="Name"
+              {...register('name')}
+              defaultValue={organization?.name}
+            />
+            <Controller
+              control={control}
+              name="timezone"
+              render={({ field }) => (
+                <WithLabel label="Timezone">
+                  <Combobox
+                    className="w-full"
+                    items={['UTC', ...Intl.supportedValuesOf('timeZone')].map(
+                      (item) => ({
+                        value: item,
+                        label: item,
+                      })
+                    )}
+                    onChange={field.onChange}
+                    placeholder="Select timezone"
+                    value={field.value}
+                    variant="input"
+                  />
+                </WithLabel>
+              )}
+            />
+            <Button
+              className="self-end"
+              disabled={!formState.isDirty}
+              size="sm"
+              type="submit"
+            >
+              Save
+            </Button>
+          </WidgetBody>
+        </Widget>
+      </form>
+
+      <div className="mt-8">
+        <DeleteOrganization organization={organization} />
+      </div>
+    </div>
+  );
+}

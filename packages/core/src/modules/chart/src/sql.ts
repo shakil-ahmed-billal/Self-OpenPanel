@@ -1,0 +1,958 @@
+// Every ClickHouse query the chart module runs, as pure `sql` fragments.
+//
+// The field resolver and filter compiler render text (see compiled.ts); their
+// output is spliced, everything else is bound. Dates bind as strings: a String
+// param in a DateTime position is parsed exactly like the literal it replaces.
+//
+// Cluster note: `events`, `profiles`, `groups` and `cohort_members` are
+// Distributed on Cloud. The cohort CTEs, the profile / group / cohort LEFT ANY
+// JOINs and any `IN (SELECT...)` a filter compiles run under the client's
+// `distributed_product_mode: 'allow'`.
+//
+// The keyed part records below are a local, function-scoped builder: assigning
+// clauses by key keeps a stable clause order.
+
+import { type SqlFragment, sql } from '@openpanel/db/src/clickhouse/sql';
+import { assertTimeBucketBudget } from '../../../shared/time-buckets';
+import type {
+  IChartBreakdown,
+  IChartEvent,
+  IInterval,
+  IPerUserAggregation,
+} from '../../report/report.constants';
+import { compiledText, fragmentWithProfileRefs } from './compiled';
+import { formatClickhouseDate } from './dates';
+import { eventMatchCondition, eventNamesOf } from './event-match';
+import {
+  buildAllCohortsLabelExpr,
+  buildAllCohortsMembershipQuery,
+  buildCohortMembershipQuery,
+  buildGroupsQuery,
+  CHART_TABLE,
+  type CohortMetadata,
+  cohortBreakdownLabelExpr,
+  collectBreakdownCohortIds,
+  collectProfileCteFields,
+  collectProfilePropertyKeys,
+  extractCohortId,
+  getCohortAlias,
+  getSelectPropertyKey,
+  isAllCohortsBreakdown,
+  isKnownEventField,
+  isNumericColumn,
+  latestProfileValue,
+  PROFILE_CTE_FIELDS,
+  profileIdsInWindow,
+  profilePropertiesCteSelect,
+} from './field-resolution';
+import {
+  filterReadsProfileJoin,
+  getEventFiltersWhereClause,
+} from './filter-where';
+import {
+  type FirstOccurrencePeriod,
+  firstTimeCondition,
+  rangePeriod,
+} from './first-time';
+
+const EVENTS_ALIAS = 'e';
+const ALL_COHORTS_ALIAS = '_all_cohorts';
+// Cohort ids are Postgres uuids; they also name a CTE and a join alias, so
+// anything else is refused rather than inlined.
+const COHORT_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+const MATH_FUNCTION_BY_SEGMENT: Record<string, string> = {
+  property_sum: 'sum',
+  property_average: 'avg',
+  property_max: 'max',
+  property_min: 'min',
+  property_p50: 'quantile(0.5)',
+  property_p95: 'quantile(0.95)',
+  property_p99: 'quantile(0.99)',
+};
+
+const PER_USER_AGGREGATE_FUNCTION: Record<
+  Exclude<IPerUserAggregation, 'count'>,
+  string
+> = {
+  sum: 'sum',
+  avg: 'avg',
+  min: 'min',
+  max: 'max',
+  median: 'quantile(0.5)',
+  p90: 'quantile(0.9)',
+  p95: 'quantile(0.95)',
+  p99: 'quantile(0.99)',
+  distinct_count: 'uniqExact',
+};
+// Inclusive upper bounds of the integer buckets; values above the last one
+// fall into the open-ended bucket.
+const DISCRETE_BUCKET_BOUNDS = [1, 2, 3, 5, 10];
+const DISCRETE_BUCKET_LABELS = ['1', '2', '3', '4-5', '6-10', '11+'];
+const CONTINUOUS_BUCKET_COUNT = 10;
+const MIN_BIN_LABEL_DIGITS = 2;
+
+export const PROPERTY_VALUES_LIMIT = 100_000;
+/** `profiles` columns a `profile.<field>` reference may select. */
+const PROFILE_COLUMNS = [
+  'id',
+  'is_external',
+  'first_name',
+  'last_name',
+  'email',
+  'avatar',
+  'properties',
+  'project_id',
+  'groups',
+  'created_at',
+  'last_seen_at',
+] as const;
+
+export type ChartQueryEvent = Pick<
+  IChartEvent,
+  | 'name'
+  | 'segment'
+  | 'filters'
+  | 'property'
+  | 'anyOf'
+  | 'firstTime'
+  | 'perUser'
+>;
+
+/** Breakdowns after `resolveChartBreakdowns`, plus the cohort rows they need. */
+export interface ResolvedChartBreakdowns {
+  breakdowns: IChartBreakdown[];
+  allCohorts: CohortMetadata[];
+  cohortMetadata: ReadonlyMap<string, CohortMetadata>;
+}
+
+export interface DistributionBinRange {
+  lo: number;
+  hi: number;
+}
+
+export type ChartSeriesQueryInput = ResolvedChartBreakdowns & {
+  event: ChartQueryEvent;
+  interval: IInterval;
+  startDate: string;
+  endDate: string;
+  projectId: string;
+  timezone: string;
+  /** Bins shared with the chart's other series, instead of this series' own range. */
+  binRange?: DistributionBinRange;
+};
+
+export type AggregateChartQueryInput = ResolvedChartBreakdowns & {
+  event: ChartQueryEvent;
+  startDate: string;
+  endDate: string;
+  projectId: string;
+  limit?: number;
+};
+
+type Parts = Record<string, SqlFragment>;
+
+export class ChartCohortIdError extends Error {
+  constructor(cohortId: string) {
+    super(`Refusing to inline cohort id ${JSON.stringify(cohortId)}`);
+    this.name = 'ChartCohortIdError';
+  }
+}
+
+function assertCohortId(cohortId: string): string {
+  if (!COHORT_ID_PATTERN.test(cohortId)) {
+    throw new ChartCohortIdError(cohortId);
+  }
+  return cohortId;
+}
+
+/**
+ * Drop breakdowns whose field name doesn't resolve to a known events column,
+ * properties path, profile path, group path, or cohort — saved reports with
+ * fields like `temple_name` (a property, not a column) reached ClickHouse as
+ * `SELECT temple_name ...`, failing parse.
+ */
+export function knownBreakdowns(
+  breakdowns: IChartBreakdown[]
+): IChartBreakdown[] {
+  return breakdowns.filter((breakdown) => isKnownEventField(breakdown.name));
+}
+
+export function requestsAllCohortsBreakdown(
+  breakdowns: IChartBreakdown[]
+): boolean {
+  return breakdowns.some((breakdown) => isAllCohortsBreakdown(breakdown.name));
+}
+
+/**
+ * Drop the all-cohorts breakdown when the project has no cohorts: its label
+ * collapses to the literal 'Unknown', which ClickHouse rejects as a join key
+ * ("Cannot determine join keys").
+ */
+export function withoutEmptyAllCohortsBreakdown(
+  breakdowns: IChartBreakdown[],
+  allCohorts: CohortMetadata[]
+): IChartBreakdown[] {
+  if (allCohorts.length > 0) {
+    return breakdowns;
+  }
+  return breakdowns.filter(
+    (breakdown) => !isAllCohortsBreakdown(breakdown.name)
+  );
+}
+
+function clauses(parts: Parts): SqlFragment[] {
+  return Object.values(parts);
+}
+
+function withClause(ctes: Parts): SqlFragment {
+  const entries = Object.entries(ctes);
+  if (entries.length === 0) {
+    return sql.empty;
+  }
+  const cteClauses = entries.map(
+    ([name, query]) => sql`${compiledText(name)} AS (${query})`
+  );
+  return sql`WITH ${sql.join(cteClauses, ', ')} `;
+}
+
+function selectClause(select: Parts): SqlFragment {
+  return sql`SELECT ${sql.join(clauses(select), ', ')}`;
+}
+
+function joinsClause(joins: Parts): SqlFragment {
+  return sql.join(clauses(joins), ' ');
+}
+
+function whereClause(where: Parts): SqlFragment {
+  const conditions = clauses(where);
+  if (conditions.length === 0) {
+    return sql.empty;
+  }
+  return sql`WHERE ${sql.join(conditions, ' AND ')}`;
+}
+
+function groupByClause(groupBy: Parts): SqlFragment {
+  const keys = clauses(groupBy);
+  if (keys.length === 0) {
+    return sql.empty;
+  }
+  return sql`GROUP BY ${sql.join(keys, ', ')}`;
+}
+
+function orderByClause(orderBy: Parts): SqlFragment {
+  const keys = clauses(orderBy);
+  if (keys.length === 0) {
+    return sql.empty;
+  }
+  return sql`ORDER BY ${sql.join(keys, ', ')}`;
+}
+
+function profileCteSelectField(
+  field: string,
+  profileKeys: string[],
+  needsFullMap: boolean
+): SqlFragment {
+  if (field === 'properties') {
+    return profilePropertiesCteSelect(profileKeys, needsFullMap);
+  }
+  // The alias is `"profile.<field>"` — two dots, so text, not `sql.id`.
+  // `collectProfileCteFields` only ever yields a name from its own closed set.
+  return sql`${latestProfileValue(field, sql.id(field, PROFILE_CTE_FIELDS))} as ${compiledText(`"profile.${field}"`)}`;
+}
+
+export function profileCte(
+  selectFields: SqlFragment[],
+  projectId: string,
+  activeProfiles: SqlFragment
+): SqlFragment {
+  return sql`SELECT ${sql.join(selectFields, ', ')}
+      FROM ${sql.id(CHART_TABLE.profiles)}
+      WHERE project_id = ${sql.string(projectId)} AND ${activeProfiles}
+      GROUP BY id`;
+}
+
+function anyRefOn(prefix: string, refs: { name: string }[]): boolean {
+  return refs.some((ref) => ref.name.startsWith(prefix));
+}
+
+interface ChartBody {
+  ctes: Parts;
+  joins: Parts;
+  where: Parts;
+  select: Parts;
+  profileKeys: string[];
+}
+
+/**
+ * The CTEs, JOINs, WHERE and `label_0` both chart shapes share, in a fixed
+ * clause order: cohort CTEs/joins, filters + project + event name + date
+ * range, group ARRAY JOIN, profile CTE.
+ */
+function chartBody({
+  event,
+  breakdowns,
+  allCohorts,
+  projectId,
+  startDate,
+  endDate,
+}: {
+  event: ChartQueryEvent;
+  breakdowns: IChartBreakdown[];
+  allCohorts: CohortMetadata[];
+  projectId: string;
+  startDate: string;
+  endDate: string;
+}): ChartBody {
+  const hasAllCohortsBreakdown =
+    requestsAllCohortsBreakdown(breakdowns) && allCohorts.length > 0;
+  const cohortIds = collectBreakdownCohortIds(breakdowns).map(assertCohortId);
+
+  const metricRef = event.property ? [{ name: event.property }] : [];
+  // Math metrics reference event.property too — missing it here would strip
+  // the Map the metric still reads from.
+  const profileJoinRefs = [
+    ...event.filters.filter(filterReadsProfileJoin),
+    ...breakdowns,
+    ...metricRef,
+  ];
+  const profileProps = collectProfilePropertyKeys(profileJoinRefs);
+  const ctes: Parts = {};
+  const joins: Parts = {};
+
+  if (hasAllCohortsBreakdown) {
+    ctes[ALL_COHORTS_ALIAS] = buildAllCohortsMembershipQuery(projectId);
+    joins[ALL_COHORTS_ALIAS] =
+      sql`INNER JOIN _all_cohorts ON _all_cohorts.profile_id = e.profile_id`;
+  }
+
+  for (const cohortId of cohortIds) {
+    const cteName = `\`cohort-${cohortId}\``;
+    const alias = getCohortAlias(cohortId);
+    ctes[cteName] = buildCohortMembershipQuery(cohortId, projectId);
+    joins[`cohort_${cohortId}`] =
+      sql`LEFT ANY JOIN ${compiledText(cteName)} AS ${sql.id(alias)} ON ${sql.id(`${alias}.profile_id`)} = e.profile_id`;
+  }
+
+  const where: Parts = {};
+  const compiledFilters = getEventFiltersWhereClause(
+    event.filters,
+    projectId,
+    EVENTS_ALIAS
+  );
+  for (const [key, clause] of Object.entries(compiledFilters)) {
+    where[key] = fragmentWithProfileRefs(clause, profileProps.keys);
+  }
+  where.projectId = sql`project_id = ${sql.string(projectId)}`;
+
+  const select: Parts = {};
+  select.label_0 = sql`${sql.string(event.name)} as label_0`;
+  const eventMatch = eventMatchCondition(event, projectId, EVENTS_ALIAS);
+  if (eventMatch) {
+    where.eventName = eventMatch;
+  }
+  const dateRange = dateRangeWhere(startDate, endDate);
+  Object.assign(where, dateRange);
+  const hasDateRange = Boolean(startDate && endDate);
+  const firstTime = hasDateRange
+    ? firstTimeCondition({
+        event,
+        projectId,
+        eventsAlias: EVENTS_ALIAS,
+        period: rangePeriod(
+          formatClickhouseDate(startDate),
+          formatClickhouseDate(endDate)
+        ),
+      })
+    : null;
+  if (firstTime) {
+    where.firstTime = firstTime;
+  }
+
+  const needsProfileJoin = anyRefOn('profile.', profileJoinRefs);
+  const needsGroupArrayJoin =
+    anyRefOn('group.', [...event.filters, ...breakdowns, ...metricRef]) ||
+    event.segment === 'group';
+
+  if (needsGroupArrayJoin) {
+    ctes._g = buildGroupsQuery(projectId);
+    joins.groups = sql`ARRAY JOIN groups AS _group_id`;
+    joins.groups_table = sql`LEFT ANY JOIN _g ON _g.id = _group_id`;
+  }
+
+  if (needsProfileJoin) {
+    const selectFields = collectProfileCteFields(profileJoinRefs).map((field) =>
+      profileCteSelectField(field, profileProps.keys, profileProps.needsFullMap)
+    );
+    ctes.profile = profileCte(
+      selectFields,
+      projectId,
+      profileIdsInWindow({
+        projectId,
+        eventNames: eventNamesOf(event),
+        window: Object.values(dateRange),
+      })
+    );
+    joins.profiles = sql`LEFT ANY JOIN profile ON profile.id = profile_id`;
+  }
+
+  return {
+    ctes,
+    joins,
+    where,
+    select,
+    profileKeys: profileProps.keys,
+  };
+}
+
+function breakdownLabel(
+  breakdown: IChartBreakdown,
+  {
+    allCohorts,
+    cohortMetadata,
+    projectId,
+    profileKeys,
+  }: Pick<
+    ChartSeriesQueryInput,
+    'allCohorts' | 'cohortMetadata' | 'projectId'
+  > &
+    Pick<ChartBody, 'profileKeys'>
+): SqlFragment {
+  if (isAllCohortsBreakdown(breakdown.name)) {
+    return buildAllCohortsLabelExpr(allCohorts, ALL_COHORTS_ALIAS);
+  }
+  const cohortId = extractCohortId(breakdown.name);
+  if (cohortId) {
+    return cohortBreakdownLabelExpr(
+      assertCohortId(cohortId),
+      cohortMetadata.get(cohortId)?.name
+    );
+  }
+  return fragmentWithProfileRefs(
+    getSelectPropertyKey(
+      breakdown.name,
+      projectId,
+      undefined,
+      undefined,
+      EVENTS_ALIAS
+    ),
+    profileKeys
+  );
+}
+
+function addBreakdownLabels(
+  input: ChartSeriesQueryInput | AggregateChartQueryInput,
+  body: ChartBody,
+  groupBy: Parts
+): void {
+  // Breakdowns start at label_1 (label_0 is reserved for event name).
+  input.breakdowns.forEach((breakdown, index) => {
+    const key = `label_${index + 1}`;
+    const label = breakdownLabel(breakdown, {
+      ...input,
+      profileKeys: body.profileKeys,
+    });
+    body.select[key] = sql`${label} as ${compiledText(key)}`;
+    groupBy[key] = compiledText(key);
+  });
+}
+
+function countExpression(
+  event: ChartQueryEvent,
+  body: ChartBody,
+  /** The aggregate shape resolves the metric property against the project; the series shape does not. */
+  metricProjectId: string | undefined
+): SqlFragment {
+  if (event.segment === 'user') {
+    return sql`countDistinct(profile_id) as count`;
+  }
+  if (event.segment === 'session') {
+    return sql`countDistinct(session_id) as count`;
+  }
+  if (event.segment === 'group') {
+    return sql`countDistinct(_group_id) as count`;
+  }
+  if (event.segment === 'user_average') {
+    return sql`COUNT(*)::float / COUNT(DISTINCT profile_id)::float as count`;
+  }
+  const mathFunction = MATH_FUNCTION_BY_SEGMENT[event.segment];
+  if (mathFunction && event.property) {
+    const propertyKey = fragmentWithProfileRefs(
+      getSelectPropertyKey(
+        event.property,
+        metricProjectId,
+        undefined,
+        undefined,
+        EVENTS_ALIAS
+      ),
+      body.profileKeys
+    );
+    const aggregate = compiledText(mathFunction);
+    if (isNumericColumn(event.property)) {
+      body.where.property = sql`${propertyKey} IS NOT NULL`;
+      return sql`${aggregate}(${propertyKey}) as count`;
+    }
+    body.where.property = sql`${propertyKey} IS NOT NULL AND notEmpty(${propertyKey})`;
+    return sql`${aggregate}(toFloat64OrNull(${propertyKey})) as count`;
+  }
+  return sql`count(*) as count`;
+}
+
+// Aliased `e`, not `subQuery`: breakdown SELECT expressions are built with the
+// events alias, so `e.properties` must be in scope in the outer query. The
+// subquery does `SELECT * FROM events e`, so `e.`-qualified references resolve.
+function oneEventPerUserFrom(body: ChartBody): SqlFragment {
+  return sql`(
+      SELECT DISTINCT ON (profile_id) * from ${sql.id(CHART_TABLE.events)} e ${joinsClause(body.joins)} WHERE ${sql.join(clauses(body.where), ' AND ')}
+        ORDER BY profile_id, created_at DESC
+      ) as e`;
+}
+
+function dateRangeWhere(startDate: string, endDate: string): Parts {
+  const where: Parts = {};
+  if (startDate) {
+    where.startDate = sql`created_at >= toDateTime(${sql.string(formatClickhouseDate(startDate))})`;
+  }
+  if (endDate) {
+    where.endDate = sql`created_at <= toDateTime(${sql.string(formatClickhouseDate(endDate))})`;
+  }
+  return where;
+}
+
+function intervalBucket(
+  interval: IInterval,
+  timezone: string
+): { select: SqlFragment; fill: (start: string, end: string) => SqlFragment } {
+  const tz = sql.string(timezone);
+  switch (interval) {
+    case 'minute':
+      return {
+        select: sql`toStartOfMinute(created_at) as date`,
+        fill: (start, end) =>
+          sql`FROM toStartOfMinute(toDateTime(${sql.string(start)})) TO toStartOfMinute(toDateTime(${sql.string(end)})) STEP toIntervalMinute(1)`,
+      };
+    case 'hour':
+      return {
+        select: sql`toStartOfHour(created_at) as date`,
+        fill: (start, end) =>
+          sql`FROM toStartOfHour(toDateTime(${sql.string(start)})) TO toStartOfHour(toDateTime(${sql.string(end)})) STEP toIntervalHour(1)`,
+      };
+    case 'day':
+      return {
+        select: sql`toStartOfDay(created_at) as date`,
+        fill: (start, end) =>
+          sql`FROM toStartOfDay(toDateTime(${sql.string(start)})) TO toStartOfDay(toDateTime(${sql.string(end)})) STEP toIntervalDay(1)`,
+      };
+    case 'week':
+      return {
+        select: sql`toStartOfWeek(created_at, 1, ${tz}) as date`,
+        fill: (start, end) =>
+          sql`FROM toStartOfWeek(toDateTime(${sql.string(start)}), 1, ${tz}) TO toStartOfWeek(toDateTime(${sql.string(end)}), 1, ${tz}) STEP toIntervalWeek(1)`,
+      };
+    case 'month':
+      return {
+        select: sql`toStartOfMonth(created_at, ${tz}) as date`,
+        fill: (start, end) =>
+          sql`FROM toStartOfMonth(toDateTime(${sql.string(start)}), ${tz}) TO toStartOfMonth(toDateTime(${sql.string(end)}), ${tz}) STEP toIntervalMonth(1)`,
+      };
+    default:
+      throw new Error(`Unsupported chart interval: ${String(interval)}`);
+  }
+}
+
+/** One series, bucketed by interval, with a windowed unique total. */
+export function chartSeriesQuery(input: ChartSeriesQueryInput): SqlFragment {
+  const { event, interval, startDate, endDate, timezone } = input;
+  const body = chartBody(input);
+  const groupBy: Parts = {};
+  const orderBy: Parts = {};
+
+  body.select.count = sql`count(*) as count`;
+  const bucket = intervalBucket(interval, timezone);
+  // ClickHouse rejects WITH FILL when TO < FROM, so only emit a fill clause
+  // for a valid range. The SELECT bucket truncation is always safe.
+  const hasDateRange = !!startDate && !!endDate;
+  if (hasDateRange) {
+    assertTimeBucketBudget({ startDate, endDate, interval });
+  }
+  const hasValidFillRange =
+    hasDateRange && new Date(endDate) >= new Date(startDate);
+  const fill = hasValidFillRange
+    ? sql`WITH FILL ${bucket.fill(startDate, endDate)}`
+    : sql.empty;
+  body.select.date = bucket.select;
+  groupBy.date = sql`date`;
+  orderBy.date = sql`date ASC`;
+
+  addBreakdownLabels(input, body, groupBy);
+  body.select.count = countExpression(event, body, undefined);
+
+  if (event.segment === 'one_event_per_user') {
+    // Filters were applied inside the subquery, so neither joins nor WHERE
+    // are re-emitted; the subquery carries the `e` alias outward.
+    const from = oneEventPerUserFrom(body);
+    return sql`${withClause(body.ctes)}${selectClause(body.select)} FROM ${from}   ${groupByClause(groupBy)} ${orderByClause(orderBy)} ${fill}`;
+  }
+
+  // Single-pass total_count: aggregate uniqState(profile_id) alongside the
+  // series in the same scan, then merge the per-group states with a window
+  // aggregate in an outer select — PARTITION BY the breakdown labels, or an
+  // empty partition for the global total.
+  body.select.uc_state = sql`uniqState(profile_id) as _uc_state`;
+  const partition = input.breakdowns.map((_, index) =>
+    compiledText(`label_${index + 1}`)
+  );
+  const totalCount =
+    partition.length > 0
+      ? sql`uniqMerge(_uc_state) OVER (PARTITION BY ${sql.join(partition, ', ')}) as total_count`
+      : sql`uniqMerge(_uc_state) OVER () as total_count`;
+
+  return sql`${withClause(body.ctes)}SELECT * EXCEPT (_uc_state), ${totalCount} FROM (${selectClause(body.select)} FROM ${sql.id(CHART_TABLE.events)} e ${joinsClause(body.joins)} ${whereClause(body.where)} ${groupByClause(groupBy)}) ${orderByClause(orderBy)} ${fill}`;
+}
+
+/** The per-user value a distribution buckets by: one aggregate over each user's events. */
+function perUserValue(
+  event: ChartQueryEvent,
+  body: ChartBody,
+  projectId: string
+): { value: SqlFragment; discrete: boolean } {
+  const aggregation = event.perUser?.aggregation ?? 'count';
+  const property = event.perUser?.property;
+  if (aggregation === 'count') {
+    return { value: sql`count(*)`, discrete: true };
+  }
+  if (!property) {
+    // Nothing to aggregate yet: no rows, so the chart shows its empty state.
+    body.where.property = sql`0 = 1`;
+    return { value: sql`count(*)`, discrete: true };
+  }
+  const propertyKey = fragmentWithProfileRefs(
+    getSelectPropertyKey(
+      property,
+      projectId,
+      undefined,
+      undefined,
+      EVENTS_ALIAS
+    ),
+    body.profileKeys
+  );
+  const aggregate = compiledText(PER_USER_AGGREGATE_FUNCTION[aggregation]);
+  if (isNumericColumn(property)) {
+    body.where.property = sql`${propertyKey} IS NOT NULL`;
+    return {
+      value: sql`${aggregate}(${propertyKey})`,
+      discrete: aggregation === 'distinct_count',
+    };
+  }
+  body.where.property = sql`${propertyKey} IS NOT NULL AND notEmpty(${propertyKey})`;
+  if (aggregation === 'distinct_count') {
+    return { value: sql`${aggregate}(${propertyKey})`, discrete: true };
+  }
+  // `toFloat64OrNull` reads "inf" and "nan" as numbers, and one of them would
+  // make the whole range unusable.
+  body.where.finiteProperty = sql`isFinite(toFloat64OrZero(${propertyKey}))`;
+  return {
+    value: sql`${aggregate}(toFloat64OrNull(${propertyKey}))`,
+    discrete: false,
+  };
+}
+
+/** One row per user and breakdown, carrying the value a distribution buckets by. */
+function perUserRows(input: ChartSeriesQueryInput) {
+  // The segment does not apply: every user counts once per series.
+  const event = { ...input.event, segment: 'event' as const };
+  const body = chartBody({
+    ...input,
+    event: { ...event, property: event.perUser?.property },
+  });
+  const groupBy: Parts = {};
+  addBreakdownLabels({ ...input, event }, body, groupBy);
+  const { value, discrete } = perUserValue(event, body, input.projectId);
+
+  const labels = Object.keys(body.select).map((key) => compiledText(key));
+  body.select.profile_id = sql`profile_id`;
+  body.select.user_value = sql`${value} as user_value`;
+  groupBy.profile_id = sql`profile_id`;
+
+  const rows = sql`SELECT * FROM (${selectClause(body.select)} FROM ${sql.id(CHART_TABLE.events)} e ${joinsClause(body.joins)} ${whereClause(body.where)} ${groupByClause(groupBy)}) WHERE user_value IS NOT NULL AND isFinite(user_value)`;
+  return { ctes: body.ctes, labels, rows, discrete };
+}
+
+/** The smallest and largest user value of one series, to share its bins with the others. */
+export function perUserRangeQuery(input: ChartSeriesQueryInput): SqlFragment {
+  const { ctes, rows } = perUserRows(input);
+  return sql`${withClause(ctes)}SELECT count() as users, toFloat64(min(user_value)) as lo, toFloat64(max(user_value)) as hi FROM (${rows})`;
+}
+
+/**
+ * Users bucketed by a per-user value (event count, or an aggregate of an
+ * event property). Counts and distinct counts use fixed integer buckets,
+ * everything else equal-width bins between the smallest and largest value,
+ * shared by every breakdown so the series line up. `binRange` extends that to
+ * the chart's other series.
+ *
+ * Rows keep the series shape: the bucket label rides in `date` and the rows
+ * come back in bucket order, which `groupByLabels` preserves.
+ */
+export function perUserDistributionQuery(
+  input: ChartSeriesQueryInput
+): SqlFragment {
+  const { ctes, labels, rows, discrete } = perUserRows(input);
+
+  const bins = sql.uint64(CONTINUOUS_BUCKET_COUNT);
+  const width = sql`((hi - lo) / ${bins})`;
+  const bucketCount = discrete
+    ? sql.uint64(DISCRETE_BUCKET_LABELS.length)
+    : sql`if(hi = lo, 1, ${bins})`;
+  const bucket = discrete
+    ? sql`arrayCount(bound -> user_value > bound, ${sql.array('Float64', DISCRETE_BUCKET_BOUNDS)})`
+    : // Events landing after a shared range was read can sit outside it.
+      sql`if(hi = lo, 0, least(toUInt32(greatest(floor((user_value - lo) / ${width}), 0)), ${bins} - 1))`;
+  // Read after the ARRAY JOIN, where the range travels as bucket_lo/bucket_hi.
+  const binWidth = sql`((bucket_hi - bucket_lo) / ${bins})`;
+  // The label is what series points are keyed by, so two bins must never round
+  // to the same text: keep one digit more than the bin width needs.
+  const labelDigits = sql`greatest(toInt32(${sql.uint64(MIN_BIN_LABEL_DIGITS)}), toInt32(ceil(-log10(${binWidth}))) + 1)`;
+  const bucketLabel = discrete
+    ? sql`${sql.array('String', DISCRETE_BUCKET_LABELS)}[bucket + 1]`
+    : sql`if(bucket_hi = bucket_lo, toString(round(bucket_lo, ${sql.uint64(MIN_BIN_LABEL_DIGITS)})), concat(toString(round(bucket_lo + bucket * ${binWidth}, ${labelDigits})), ' - ', toString(round(bucket_lo + (bucket + 1) * ${binWidth}, ${labelDigits}))))`;
+  const ownRange = sql`, min(user_value) OVER () as lo, max(user_value) OVER () as hi`;
+  const sharedRange = input.binRange
+    ? sql`, ${sql.float64(input.binRange.lo)} as lo, ${sql.float64(input.binRange.hi)} as hi`
+    : ownRange;
+  const range = discrete ? sql`, 0 as lo, 0 as hi` : sharedRange;
+
+  // One count per bucket and series, empty buckets included, so the x-axis
+  // keeps its shape; ARRAY JOIN turns them back into rows.
+  return sql`${withClause(ctes)}SELECT ${sql.join(labels, ', ')}, ${bucketLabel} as date, count, total_count
+    FROM (
+      SELECT ${sql.join(labels, ', ')}, any(lo) as bucket_lo, any(hi) as bucket_hi, count(*) as total_count,
+        sumForEach(arrayMap(index -> toUInt64(index = bucket), range(${bucketCount}))) as counts
+      FROM (
+        SELECT *, ${bucket} as bucket
+        FROM (SELECT *${range} FROM (${rows}))
+      )
+      GROUP BY ${sql.join(labels, ', ')}
+    )
+    ARRAY JOIN counts as count, range(length(counts)) as bucket
+    ORDER BY bucket ASC`;
+}
+
+/** One row per breakdown combination over the whole range. */
+export function aggregateChartQuery(
+  input: AggregateChartQueryInput
+): SqlFragment {
+  const { event, startDate, projectId, limit } = input;
+  const body = chartBody(input);
+  const groupBy: Parts = {};
+  const orderBy: Parts = {};
+
+  // A constant date field: groupByLabels expects one, and the whole range
+  // aggregates into it.
+  body.select.date = sql`${sql.string(startDate)} as date`;
+  addBreakdownLabels(input, body, groupBy);
+  groupBy.label_0 = sql`label_0`;
+  body.select.count = countExpression(event, body, projectId);
+
+  const head = sql`${withClause(body.ctes)}${selectClause(body.select)}`;
+
+  if (event.segment === 'one_event_per_user') {
+    // The filters were applied inside the subquery; re-emitting the outer
+    // WHERE made it reference aliases the subquery dropped (a profile or
+    // group filter, or the ARRAY JOIN's _group_id). Same shape as the series
+    // branch below.
+    const from = oneEventPerUserFrom(body);
+    return sql`${head} FROM ${from} ${groupByClause(groupBy)}`;
+  }
+
+  orderBy.count = sql`count DESC`;
+  const limitClause = limit ? sql`LIMIT ${sql.uint64(limit)}` : sql.empty;
+  return sql`${head} FROM ${sql.id(CHART_TABLE.events)} e ${joinsClause(body.joins)} ${whereClause(body.where)} ${groupByClause(groupBy)} ${orderByClause(orderBy)} ${limitClause}`;
+}
+
+/**
+ * projectCard: three months of daily unique visitors + revenue, filled.
+ * The timezone travels as `clickhouse_settings.session_timezone` (the caller
+ * passes it) rather than an inline `SETTINGS` clause.
+ */
+export function projectCardChartQuery(projectId: string): SqlFragment {
+  return sql`SELECT
+            uniqHLL12(profile_id) as value,
+            toStartOfDay(created_at) as date,
+            sum(revenue * sign) as revenue
+        FROM ${sql.id(CHART_TABLE.sessions)}
+        WHERE
+            project_id = ${sql.string(projectId)} AND
+            created_at >= now() - interval '3 month'
+        GROUP BY date
+        ORDER BY date ASC
+        WITH FILL FROM toStartOfDay(now() - interval '3 month')
+        TO toStartOfDay(now())
+        STEP INTERVAL 1 day`;
+}
+
+/** projectCard: rolling 3-month / 1-month / 1-day unique visitors and revenue. */
+export function projectCardMetricsQuery(projectId: string): SqlFragment {
+  return sql`SELECT uniqHLL12(if(created_at >= (now() - toIntervalMonth(3)), profile_id, null)) AS months_3, uniqHLL12(if(created_at >= (now() - toIntervalMonth(6)) AND created_at < (now() - toIntervalMonth(3)), profile_id, null)) AS months_3_prev, uniqHLL12(if(created_at >= (now() - toIntervalMonth(1)), profile_id, null)) AS month, uniqHLL12(if(created_at >= (now() - toIntervalDay(1)), profile_id, null)) AS day, uniqHLL12(if(created_at >= (now() - toIntervalDay(2)) AND created_at < (now() - toIntervalDay(1)), profile_id, null)) AS day_prev, sum(revenue * sign) as revenue FROM ${sql.id(CHART_TABLE.sessions)} WHERE project_id = ${sql.string(projectId)} AND created_at >= (now() - toIntervalMonth(6))`;
+}
+
+export function eventNamesWithCountQuery(projectId: string): SqlFragment {
+  // `count(name)` counts MV ROWS — one per name per insert part — not events.
+  // The table carries the real total in `event_count`.
+  return sql`SELECT name, sum(event_count) as count FROM ${sql.id(CHART_TABLE.eventNamesMv)} WHERE project_id = ${sql.string(projectId)} GROUP BY name ORDER BY count DESC, name ASC`;
+}
+
+function optionalEventName(event: string | undefined): SqlFragment {
+  return event && event !== '*'
+    ? sql` AND name = ${sql.string(event)}`
+    : sql.empty;
+}
+
+export function eventPropertyKeysQuery(
+  projectId: string,
+  event: string | undefined,
+  limit: number
+): SqlFragment {
+  return sql`SELECT distinct property_key, max(created_at) as created_at FROM ${sql.id(CHART_TABLE.eventPropertyValuesMv)} WHERE project_id = ${sql.string(projectId)}${optionalEventName(event)} GROUP BY property_key ORDER BY created_at DESC, property_key ASC LIMIT ${sql.uint64(limit)}`;
+}
+
+export function eventPropertyValuesQuery(
+  projectId: string,
+  propertyKey: string,
+  event: string | undefined,
+  limit: number
+): SqlFragment {
+  return sql`SELECT distinct property_value, max(created_at) as created_at FROM ${sql.id(CHART_TABLE.eventPropertyValuesMv)} WHERE project_id = ${sql.string(projectId)} AND property_key = ${sql.string(propertyKey)}${optionalEventName(event)} GROUP BY property_value ORDER BY created_at DESC, property_value ASC LIMIT ${sql.uint64(limit)}`;
+}
+
+/** Distinct values of a `profile.*` field straight off the profiles table. */
+export function profilePropertyValuesQuery(
+  projectId: string,
+  expression: SqlFragment
+): SqlFragment {
+  return sql`SELECT values FROM (SELECT argMax(${expression}, last_seen_at) as values, argMax(created_at, last_seen_at) as created_at FROM ${sql.id(CHART_TABLE.profiles)} WHERE project_id = ${sql.string(projectId)} GROUP BY id) WHERE values != '' AND values IS NOT NULL GROUP BY values ORDER BY max(created_at) DESC LIMIT ${sql.uint64(PROPERTY_VALUES_LIMIT)}`;
+}
+
+/** Distinct values of a `group.*` field straight off the groups table. */
+export function groupPropertyValuesQuery(
+  projectId: string,
+  expression: SqlFragment
+): SqlFragment {
+  return sql`SELECT distinct ${expression} as values FROM ${sql.id(CHART_TABLE.groups)} FINAL WHERE project_id = ${sql.string(projectId)} AND deleted = 0 AND ${expression} != '' AND ${expression} IS NOT NULL ORDER BY created_at DESC LIMIT ${sql.uint64(PROPERTY_VALUES_LIMIT)}`;
+}
+
+export interface ChartBucketProfilesInput {
+  projectId: string;
+  /** Bucket start as a `YYYY-MM-DD HH:mm:ss` string. */
+  bucketDate: string;
+  interval: IInterval;
+  event: Pick<IChartEvent, 'name' | 'filters' | 'anyOf' | 'firstTime'>;
+  breakdowns: Record<string, string>;
+  /** Cap on the ids handed to the drill-down modal. */
+  limit: number;
+}
+
+function bucketEquals(
+  interval: IInterval,
+  bucketDate: string,
+  column: SqlFragment = sql`created_at`
+): SqlFragment {
+  const date = sql.string(bucketDate);
+  switch (interval) {
+    case 'minute':
+      return sql`toStartOfMinute(${column}) = toDateTime(${date})`;
+    case 'hour':
+      return sql`toStartOfHour(${column}) = toDateTime(${date})`;
+    case 'day':
+      return sql`toStartOfDay(${column}) = toDate(${date})`;
+    case 'week':
+      return sql`toStartOfWeek(toDateTime(${column})) = toDate(${date})`;
+    case 'month':
+      return sql`toStartOfMonth(toDateTime(${column})) = toDate(${date})`;
+    default:
+      throw new Error(`Unsupported chart interval: ${String(interval)}`);
+  }
+}
+
+/** Top-level profile columns a `profile.*` reference reads, in first-seen order, besides `id`. */
+function profileFieldsToSelect(refs: string[]): SqlFragment[] {
+  const fields: string[] = [];
+  for (const ref of refs) {
+    const field = ref.replace('profile.', '').split('.')[0];
+    if (field && field !== 'id' && !fields.includes(field)) {
+      fields.push(field);
+    }
+  }
+  // `sql.id` refuses any field not in PROFILE_COLUMNS rather than splicing it.
+  return fields.map(
+    (field) =>
+      sql`${latestProfileValue(field, sql.id(field, PROFILE_COLUMNS))} AS ${sql.id(field, PROFILE_COLUMNS)}`
+  );
+}
+
+/** Distinct profile ids behind one chart data point. */
+export function chartBucketProfilesQuery(
+  input: ChartBucketProfilesInput
+): SqlFragment {
+  const { projectId, event, interval, bucketDate, breakdowns, limit } = input;
+  const breakdownKeys = Object.keys(breakdowns);
+
+  const where: Parts = {};
+  for (const [key, clause] of Object.entries(
+    getEventFiltersWhereClause(event.filters, projectId)
+  )) {
+    where[key] = clause;
+  }
+  where.projectId = sql`project_id = ${sql.string(projectId)}`;
+  const dateRange = bucketEquals(interval, bucketDate);
+  where.dateRange = dateRange;
+  const eventMatch = eventMatchCondition(event, projectId);
+  if (eventMatch) {
+    where.eventName = eventMatch;
+  }
+  const bucketPeriod: FirstOccurrencePeriod = {
+    contains: (firstSeen) => bucketEquals(interval, bucketDate, firstSeen),
+  };
+  const firstTime = firstTimeCondition({
+    event,
+    projectId,
+    eventsAlias: EVENTS_ALIAS,
+    period: bucketPeriod,
+  });
+  if (firstTime) {
+    where.firstTime = firstTime;
+  }
+
+  const joins: Parts = {};
+  const profileRefs = [
+    ...event.filters
+      .filter(filterReadsProfileJoin)
+      .map((filter) => filter.name),
+    ...breakdownKeys,
+  ].filter((name) => name.startsWith('profile.'));
+  if (profileRefs.length > 0) {
+    const fields = sql.join(profileFieldsToSelect(profileRefs), ', ');
+    const activeProfiles = profileIdsInWindow({
+      projectId,
+      eventNames: eventNamesOf(event),
+      window: [dateRange],
+    });
+    joins.profiles = sql`LEFT ANY JOIN (SELECT id, ${fields} FROM ${sql.id(CHART_TABLE.profiles)} WHERE project_id = ${sql.string(projectId)} AND ${activeProfiles} GROUP BY id) as profile on profile.id = profile_id`;
+  }
+
+  const needsGroupJoin = [
+    ...event.filters.map((filter) => filter.name),
+    ...breakdownKeys,
+  ].some((name) => name.startsWith('group.'));
+  if (needsGroupJoin) {
+    joins.groups = sql`ARRAY JOIN groups AS _group_id`;
+    joins.groups_cte = sql`LEFT ANY JOIN (${buildGroupsQuery(projectId)}) AS _g ON _g.id = _group_id`;
+  }
+
+  for (const [key, value] of Object.entries(breakdowns)) {
+    const propertyKey = getSelectPropertyKey(key, projectId);
+    where[`breakdown_${key}`] = sql`${propertyKey} = ${sql.string(value)}`;
+  }
+
+  return sql`SELECT DISTINCT profile_id FROM ${sql.id(CHART_TABLE.events)} e ${joinsClause(joins)} ${whereClause(where)} LIMIT ${sql.uint64(limit)}`;
+}

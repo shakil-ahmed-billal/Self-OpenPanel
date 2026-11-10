@@ -1,0 +1,219 @@
+services:
+  op-proxy:
+    image: caddy:2-alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - op-proxy-data:/data
+      - op-proxy-config:/config
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+    depends_on:
+      op-dashboard:
+        condition: service_healthy
+      op-api:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  op-db:
+    image: postgres:14-alpine
+    restart: always
+    volumes:
+      - op-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Uncomment to expose ports
+    # ports:
+    #   - 5432:5432
+
+  op-kv:
+    image: redis:7.2.5-alpine
+    restart: always
+    volumes:
+      - op-kv-data:/data
+    command: ["redis-server", "--maxmemory-policy", "noeviction"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Uncomment to expose ports
+    # ports:
+    #   - 6379:6379
+
+  op-ch:
+    image: clickhouse/clickhouse-server:25.10.2.65
+    restart: always
+    volumes:
+      - op-ch-data:/var/lib/clickhouse
+      - ./clickhouse/clickhouse-config.xml:/etc/clickhouse-server/config.d/op-config.xml:ro
+      - ./clickhouse/clickhouse-user-config.xml:/etc/clickhouse-server/users.d/op-user-config.xml:ro
+      - ./clickhouse/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    environment:
+      - CLICKHOUSE_SKIP_USER_SETUP=1
+    healthcheck:
+      test: ["CMD-SHELL", 'clickhouse-client --query "SELECT 1"']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Required: every tracked event goes through Redpanda (Kafka-compatible).
+  # --memory=2G is a single-node starting point; raise it if the host can
+  # spare more, or lower it on small machines.
+  op-rp:
+    image: redpandadata/redpanda:v25.1.4
+    restart: always
+    command:
+      - redpanda
+      - start
+      - --kafka-addr=internal://0.0.0.0:9092
+      - --advertise-kafka-addr=internal://op-rp:9092
+      - --rpc-addr=0.0.0.0:33145
+      - --advertise-rpc-addr=op-rp:33145
+      - --smp=1
+      - --memory=2G
+      - --default-log-level=info
+    volumes:
+      - op-rp-data:/var/lib/redpanda/data
+      - ./redpanda/bootstrap.yaml:/etc/redpanda/.bootstrap.yaml:ro
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health", "--exit-when-healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Uncomment to reach the Kafka API from the host
+    # ports:
+    #   - 19092:9092
+
+  op-api:
+    image: lindesvard/openpanel-api:3
+    restart: always
+    # Prisma migrations run here, before the api starts, with the Prisma CLI
+    # the image ships. The ClickHouse code migrations run inside the api once
+    # it is listening.
+    command: >
+      sh -c "
+        echo 'Running migrations...'
+        cd /app/packages/db && prisma migrate deploy
+
+        cd /app/apps/api && bun run start
+      "
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/healthcheck || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      op-db:
+        condition: service_healthy
+      op-ch:
+        condition: service_healthy
+      op-kv:
+        condition: service_healthy
+      op-rp:
+        condition: service_healthy
+    env_file:
+      - .env
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  op-dashboard:
+    image: lindesvard/openpanel-dashboard:3
+    restart: always
+    depends_on:
+      op-api:
+        condition: service_healthy
+    env_file:
+      - .env
+    healthcheck:
+      test:
+        ["CMD-SHELL", "curl -f http://localhost:3000/api/healthcheck || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # The worker is the api image started with ROLE=worker: it runs the queues,
+  # the scheduled jobs and the event consumer.
+  op-worker:
+    image: lindesvard/openpanel-api:3
+    restart: always
+    environment:
+      - ROLE=worker
+    depends_on:
+      op-api:
+        condition: service_healthy
+      op-rp:
+        condition: service_healthy
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/healthz/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      mode: replicated
+      replicas: $OP_WORKER_REPLICAS
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "30m"
+        max-file: "3"
+
+volumes:
+  op-db-data:
+    driver: local
+  op-kv-data:
+    driver: local
+  op-ch-data:
+    driver: local
+  op-rp-data:
+    driver: local
+  op-proxy-data:
+    driver: local
+  op-proxy-config:
+    driver: local

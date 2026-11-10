@@ -1,0 +1,36 @@
+{
+  "name": "@openpanel/api",
+  "version": "0.0.4",
+  "type": "module",
+  "scripts": {
+    "dev": "ROLE=all dotenv -e ../../.env -- bun --watch src/main.ts",
+    "testing": "API_PORT=3333 bun run dev",
+    "dev:worker": "ROLE=worker dotenv -e ../../.env -- bun --watch src/main.ts",
+    "start": "bun run src/main.ts",
+    "test:manage": "bun scripts/test-manage-api.ts",
+    "e2e:sessions": "LOG_LEVEL=warn dotenv -e ../../.env -- bun e2e/session-e2e.ts",
+    "e2e:sessions:stress": "LOG_LEVEL=warn dotenv -e ../../.env -- bun e2e/session-stress.ts",
+    "e2e:saturation": "LOG_LEVEL=warn dotenv -e ../../.env -- bun e2e/saturation-sweep.ts",
+    "e2e:ingest-load": "LOG_LEVEL=warn dotenv -e ../../.env -- bun e2e/ingest-load.ts",
+    "e2e:legacy-jobs": "bash e2e/legacy-job-proof.sh",
+    "test": "bun test --isolate",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@openpanel/core": "workspace:*",
+    "@openpanel/db": "workspace:*",
+    "@openpanel/redis": "workspace:*",
+    "elysia": "1.4.30",
+    "pino": "catalog:",
+    "pino-pretty": "catalog:",
+    "uuid": "9.0.1",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@faker-js/faker": "9.9.0",
+    "@openpanel/tsconfig": "workspace:*",
+    "@types/uuid": "10.0.0",
+    "bun-types": "1.4.4",
+    "typescript": "catalog:"
+  }
+}

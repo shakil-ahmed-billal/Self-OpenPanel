@@ -1,0 +1,17 @@
+{
+  "extends": "@openpanel/tsconfig/base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "tsBuildInfoFile": "node_modules/.cache/tsbuildinfo.json",
+    "strictNullChecks": true,
+    // `bun test` is the runner (ADR-010): src/config/env.test.ts and the
+    // shared ../../test preload import `bun:test`, which only `bun-types`
+    // declares.
+    "types": ["bun-types"]
+  },
+  "include": [".", "../../test"],
+  "exclude": ["node_modules", "dist"]
+}

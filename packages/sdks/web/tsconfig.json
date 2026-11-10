@@ -1,0 +1,13 @@
+{
+  "extends": "@openpanel/tsconfig/sdk.json",
+  "compilerOptions": {
+    "incremental": false,
+    "outDir": "dist",
+    "strictNullChecks": true,
+    // `bun test` is the runner: the test file imports `bun:test`, which only
+    // `bun-types` declares. Listing it opts out of the automatic @types/* sweep,
+    // so `node` is named back in.
+    "types": ["bun-types", "node"]
+  },
+  "exclude": ["dist"]
+}

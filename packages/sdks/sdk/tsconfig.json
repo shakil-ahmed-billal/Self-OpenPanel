@@ -1,0 +1,10 @@
+{
+  "extends": "@openpanel/tsconfig/sdk.json",
+  "compilerOptions": {
+    "incremental": false,
+    "outDir": "dist",
+    "strictNullChecks": true,
+    "types": ["bun-types", "node"]
+  },
+  "exclude": ["dist"]
+}
