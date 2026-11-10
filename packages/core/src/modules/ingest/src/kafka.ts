@@ -67,6 +67,26 @@ const getKafkaSecurity = (config: KafkaConfig): ResolvedKafkaSecurity => {
   return kafkaSecurity;
 };
 
+const createKafkaJsLogCreator = (config: CoreConfig) => () => {
+  const logger = kafkaLogger(config);
+  return ({ level, log }: { level: number; log: Record<string, unknown> }) => {
+    const { message, ...extra } = log;
+    const msg = String(message ?? '');
+    if (msg.includes('rebalancing') || msg.includes('Heartbeat')) {
+      return;
+    }
+    if (level === logLevel.ERROR) {
+      logger.error(extra, msg);
+    } else if (level === logLevel.WARN) {
+      logger.warn(extra, msg);
+    } else if (level === logLevel.INFO) {
+      logger.info(extra, msg);
+    } else {
+      logger.debug(extra, msg);
+    }
+  };
+};
+
 let kafka: Kafka | null = null;
 const getKafka = (config: CoreConfig): Kafka => {
   assertKafkaConfigured(config.kafka);
@@ -76,6 +96,7 @@ const getKafka = (config: CoreConfig): Kafka => {
       clientId: config.kafka.clientId,
       brokers: config.kafka.brokers,
       logLevel: logLevel.WARN,
+      logCreator: createKafkaJsLogCreator(config) as never,
       requestTimeout: config.kafka.requestTimeoutMs,
       connectionTimeout: config.kafka.connectionTimeoutMs,
       ssl: security.ssl,

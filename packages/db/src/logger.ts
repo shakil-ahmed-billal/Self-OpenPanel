@@ -88,6 +88,67 @@ function getServiceName(name: string): string {
 // Same Bun/pino-pretty incompatibility as the `isBun` guard in
 // @openpanel/core's `src/pino-logger.ts`; keep in sync by hand.
 const isBun = !!process.versions.bun;
+const rawStdoutWrite = process.stdout.write.bind(process.stdout);
+
+function formatGeneralLog(data: Record<string, unknown>): string {
+  const reset = '\x1b[0m';
+  const bold = '\x1b[1m';
+  const dim = '\x1b[90m';
+  const name = String(data.name ?? 'db');
+  const msg = String(data.msg ?? '');
+  const level = Number(data.level ?? 30);
+
+  const now = new Date();
+  const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+
+  let levelTag = '\x1b[36m[INFO]\x1b[0m';
+  if (level >= 50) {
+    levelTag = `\x1b[31m${bold}[ERROR]\x1b[0m`;
+  } else if (level >= 40) {
+    levelTag = `\x1b[33m${bold}[WARN]\x1b[0m`;
+  } else if (level <= 20) {
+    levelTag = `${dim}[DEBUG]${reset}`;
+  }
+
+  let line = `${dim}[${timeStr}]${reset} ${levelTag} ${dim}(${name})${reset} ${msg}\n`;
+  if (data.err && typeof data.err === 'object') {
+    const err = data.err as { stack?: string; message?: string };
+    if (err.stack) {
+      line += `${err.stack}\n`;
+    } else if (err.message) {
+      line += `${err.message}\n`;
+    }
+  }
+  return line;
+}
+
+function createDevStream() {
+  return {
+    write(chunk: string | Uint8Array) {
+      const raw =
+        typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8');
+      for (const line of raw.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          continue;
+        }
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (
+            parsed.level < 30 &&
+            process.env.LOG_LEVEL !== 'debug' &&
+            process.env.LOG_LEVEL !== 'trace'
+          ) {
+            continue;
+          }
+          rawStdoutWrite(formatGeneralLog(parsed));
+        } catch {
+          rawStdoutWrite(`${trimmed}\n`);
+        }
+      }
+    },
+  };
+}
 
 export function createLogger({ name }: { name: string }): ILogger {
   const service = getServiceName(name);
@@ -95,37 +156,45 @@ export function createLogger({ name }: { name: string }): ILogger {
   const useHyperDX = logExporter === 'otlp' && !!process.env.HYPERDX_API_KEY;
   const usePretty =
     !(useHyperDX || isBun) && process.env.NODE_ENV !== 'production';
+  const useDev =
+    process.env.NODE_ENV !== 'production' &&
+    !useHyperDX &&
+    logExporter !== 'otlp' &&
+    !usePretty;
 
-  return pino({
-    name: service,
-    level: logLevel,
-    enabled: !silent,
-    formatters: {
-      log: (obj) => {
-        return redactSensitive(obj) as Record<string, unknown>;
+  return pino(
+    {
+      name: service,
+      level: logLevel,
+      enabled: !silent,
+      formatters: {
+        log: (obj) => {
+          return redactSensitive(obj) as Record<string, unknown>;
+        },
       },
-    },
-    // Keep trace_id/span_id on every line even in stdout mode so trace↔log
-    // correlation survives when a collector does the shipping.
-    mixin: process.env.HYPERDX_API_KEY
-      ? HyperDX.getPinoMixinFunction
-      : undefined,
-    transport: useHyperDX
-      ? HyperDX.getPinoTransport(logLevel, {
-          detectResources: true,
-          service,
-        })
-      : usePretty
-        ? {
-            target: 'pino-pretty',
-            options: {
-              colorize: true,
-              translateTime: 'SYS:standard',
-              ignore: 'pid,hostname,service',
-            },
-          }
+      // Keep trace_id/span_id on every line even in stdout mode so trace↔log
+      // correlation survives when a collector does the shipping.
+      mixin: process.env.HYPERDX_API_KEY
+        ? HyperDX.getPinoMixinFunction
         : undefined,
-  });
+      transport: useHyperDX
+        ? HyperDX.getPinoTransport(logLevel, {
+            detectResources: true,
+            service,
+          })
+        : usePretty
+          ? {
+              target: 'pino-pretty',
+              options: {
+                colorize: true,
+                translateTime: 'SYS:standard',
+                ignore: 'pid,hostname,service',
+              },
+            }
+          : undefined,
+    },
+    useDev ? (createDevStream() as never) : undefined
+  );
 }
 
 export const logger = createLogger({ name: 'db:prisma' });

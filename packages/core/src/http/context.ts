@@ -90,7 +90,7 @@ export function requestLogging(
     .use(requestContext(deps))
     .onAfterResponse(
       { as: 'global' },
-      ({ ctx, request, path, query, body, timestamp, clientIpHeader }) => {
+      ({ ctx, request, path, query, body, timestamp, clientIpHeader, set }) => {
         // This global hook also runs for a request that matched no route, whose
         // `derive` never ran: no request logger and no arrival timestamp.
         if (!ctx) {
@@ -104,6 +104,12 @@ export function requestLogging(
         }
 
         const elapsed = Date.now() - timestamp;
+        const status =
+          typeof set?.status === 'number'
+            ? set.status
+            : set?.status
+              ? Number(set.status)
+              : 200;
 
         if (path.includes('trpc')) {
           ctx.logger.info(
@@ -112,6 +118,7 @@ export function requestLogging(
               method: request.method,
               input: parseTrpcInput(query.input),
               elapsed,
+              status,
             },
             'request done'
           );
@@ -126,6 +133,7 @@ export function requestLogging(
             url: path,
             method: request.method,
             elapsed,
+            status,
             headers: pickHeaders(request.headers, LOGGED_INGEST_HEADERS),
             body: path.startsWith('/track') ? body : undefined,
             clientIp: verbose ? ctx.ip : '',

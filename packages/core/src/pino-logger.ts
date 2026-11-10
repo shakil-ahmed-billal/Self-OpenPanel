@@ -87,6 +87,117 @@ export function hyperdxTransport(
   return { ...transport, target: requireFromCore.resolve(transport.target) };
 }
 
+function formatMorganLine(data: Record<string, unknown>): string {
+  const method = String(data.method ?? 'GET').toUpperCase();
+  const url = String(data.url ?? '/');
+  const status = Number(data.status ?? 200);
+  const elapsed = typeof data.elapsed === 'number' ? `${data.elapsed}ms` : '';
+
+  const reset = '\x1b[0m';
+  const bold = '\x1b[1m';
+  const dim = '\x1b[90m';
+
+  let methodColor = '\x1b[32m';
+  if (method === 'POST') {
+    methodColor = '\x1b[36m';
+  } else if (method === 'PUT' || method === 'PATCH') {
+    methodColor = '\x1b[33m';
+  } else if (method === 'DELETE') {
+    methodColor = '\x1b[31m';
+  }
+
+  let statusColor = '\x1b[32m';
+  if (status >= 500) {
+    statusColor = '\x1b[31m';
+  } else if (status >= 400) {
+    statusColor = '\x1b[33m';
+  } else if (status >= 300) {
+    statusColor = '\x1b[36m';
+  }
+
+  const now = new Date();
+  const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+
+  let extra = '';
+  if (url.includes('/trpc/')) {
+    const procedure = url.split('/trpc/')[1]?.split('?')[0];
+    if (procedure) {
+      extra = ` ${dim}[trpc: ${procedure}]${reset}`;
+    }
+  }
+
+  return `${dim}[${timeStr}]${reset} ${methodColor}${bold}${method}${reset} ${url} ${statusColor}${status}${reset} ${dim}-${reset} ${dim}${elapsed}${reset}${extra}\n`;
+}
+
+function formatGeneralLog(data: Record<string, unknown>): string {
+  const reset = '\x1b[0m';
+  const bold = '\x1b[1m';
+  const dim = '\x1b[90m';
+  const name = String(data.name ?? 'server');
+  const msg = String(data.msg ?? '');
+  const level = Number(data.level ?? 30);
+
+  const now = new Date();
+  const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+
+  let levelTag = '\x1b[36m[INFO]\x1b[0m';
+  if (level >= 50) {
+    levelTag = `\x1b[31m${bold}[ERROR]\x1b[0m`;
+  } else if (level >= 40) {
+    levelTag = `\x1b[33m${bold}[WARN]\x1b[0m`;
+  } else if (level <= 20) {
+    levelTag = `${dim}[DEBUG]${reset}`;
+  }
+
+  let line = `${dim}[${timeStr}]${reset} ${levelTag} ${dim}(${name})${reset} ${msg}\n`;
+
+  if (msg === 'trpc request abandoned' || msg.includes('request abandoned')) {
+    return line;
+  }
+
+  if (data.err && typeof data.err === 'object') {
+    const err = data.err as { stack?: string; message?: string };
+    if (err.stack) {
+      line += `${err.stack}\n`;
+    } else if (err.message) {
+      line += `${err.message}\n`;
+    }
+  }
+  return line;
+}
+
+export function createMorganDevStream() {
+  return {
+    write(chunk: string | Uint8Array) {
+      const raw =
+        typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8');
+      for (const line of raw.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          continue;
+        }
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (parsed.msg === 'request done' && parsed.method && parsed.url) {
+            rawStdoutWrite(formatMorganLine(parsed));
+          } else {
+            if (
+              parsed.level < 30 &&
+              process.env.LOG_LEVEL !== 'debug' &&
+              process.env.LOG_LEVEL !== 'trace'
+            ) {
+              continue;
+            }
+            rawStdoutWrite(formatGeneralLog(parsed));
+          }
+        } catch {
+          rawStdoutWrite(`${trimmed}\n`);
+        }
+      }
+    },
+  };
+}
+
 export function createLogger({
   name,
   config,
@@ -99,32 +210,37 @@ export function createLogger({
 
   const useHyperDX = exporter === 'otlp' && !!hyperdxApiKey;
   const usePretty = !(useHyperDX || isBun || config.isProduction);
+  const useDevMorgan =
+    !(config.isProduction || useHyperDX) && exporter !== 'otlp' && !usePretty;
 
-  return pino({
-    name: service,
-    level,
-    enabled: !silent,
-    formatters: {
-      log: (obj) => {
-        return redactSensitive(obj) as Record<string, unknown>;
+  return pino(
+    {
+      name: service,
+      level,
+      enabled: !silent,
+      formatters: {
+        log: (obj) => {
+          return redactSensitive(obj) as Record<string, unknown>;
+        },
       },
+      // Keep trace_id/span_id on every line even in stdout mode so trace↔log
+      // correlation survives when a collector does the shipping.
+      mixin: hyperdxApiKey ? HyperDX.getPinoMixinFunction : undefined,
+      transport: useHyperDX
+        ? hyperdxTransport(level, service)
+        : usePretty
+          ? {
+              target: 'pino-pretty',
+              options: {
+                colorize: true,
+                translateTime: 'SYS:standard',
+                ignore: 'pid,hostname,service',
+              },
+            }
+          : undefined,
     },
-    // Keep trace_id/span_id on every line even in stdout mode so trace↔log
-    // correlation survives when a collector does the shipping.
-    mixin: hyperdxApiKey ? HyperDX.getPinoMixinFunction : undefined,
-    transport: useHyperDX
-      ? hyperdxTransport(level, service)
-      : usePretty
-        ? {
-            target: 'pino-pretty',
-            options: {
-              colorize: true,
-              translateTime: 'SYS:standard',
-              ignore: 'pid,hostname,service',
-            },
-          }
-        : undefined,
-  });
+    useDevMorgan ? (createMorganDevStream() as never) : undefined
+  );
 }
 
 const MAX_INTERCEPTED_LINE_LENGTH = 8192;

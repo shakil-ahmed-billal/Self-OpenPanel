@@ -39,6 +39,9 @@ class CustomLogger implements Logger {
     logger.debug({ args }, message);
   }
   info({ message, args }: LogParams) {
+    if (message.includes('Query:') || message.includes('Executed query')) {
+      return;
+    }
     logger.info({ args }, message);
   }
   warn({ message, args }: WarnLogParams) {
