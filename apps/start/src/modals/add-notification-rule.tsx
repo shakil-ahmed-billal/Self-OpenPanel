@@ -110,8 +110,7 @@ export default function AddNotificationRule({ rule }: Props) {
     mutation.mutate(data);
   };
 
-  // Only notification sinks belong in a rule — export integrations (S3/GCS)
-  // come back from the same list endpoint but have nothing to deliver to.
+  // Only notification sinks belong in a rule.
   const integrations = (integrationsQuery.data ?? []).filter((integration) =>
     isKind(integration.config, 'notification')
   );

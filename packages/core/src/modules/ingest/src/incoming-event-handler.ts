@@ -16,25 +16,17 @@ import {
   parseReferrer,
 } from '../../../shared/parse-referrer';
 import {
-  type AiEventIdentitySource,
-  buildAiEventRow,
-  type IClickhouseAiEvent,
-} from '../../ai/ai.service';
-import {
   createEvent,
   type IServiceCreateEventPayload,
   type IServiceCreateEventPayloadWithId,
   type IServiceEvent,
 } from '../../event/event.service';
-import { matchEvent } from '../../notification/notification.service';
 import type { IProjectFilters } from '../../project/project.constants';
-import {
-  getProjectAiStoreContentCached,
-  getProjectByIdCached,
-} from '../../project/project.service';
+import { getProjectByIdCached } from '../../project/project.service';
 import type { IClickhouseSession } from '../../session/session.service';
 import { sessionEndsEnqueued } from '../../session/src/session.metrics';
 import type { EnqueueSessionEndInput } from '../../session/src/session-end';
+import { matchEvent } from './event-match';
 import type { IncomingEventPayload } from './incoming-event';
 import { sessionsStarted } from './ingest.metrics';
 
@@ -108,61 +100,26 @@ export interface IncomingEventDeps {
   createEvent(
     payload: IServiceCreateEventPayloadWithId
   ): Promise<{ document: unknown } | unknown>;
-  checkNotificationRulesForEvent(
-    payload: IServiceCreateEventPayload
-  ): Promise<unknown>;
   projects: {
     getCached(projectId: string): Promise<IncomingEventProject | null>;
     /** Conditional update + cache clear; idempotent across workers. */
     markFirstEvent(projectId: string): Promise<unknown>;
-    /** Read without an in-process cache, so an opt-out applies at once. */
-    getAiStoreContent(projectId: string): Promise<boolean | null>;
   };
   enqueueSessionEnd(input: EnqueueSessionEndInput): Promise<unknown>;
   metrics: IncomingEventMetrics;
-  aiEvents: {
-    add(row: IClickhouseAiEvent): Promise<unknown>;
-  };
-}
-
-/**
- * The one lookup a work scope cannot supply, resolved once at the composition
- * root (`apps/api`'s main.ts) rather than per message. `getProjectByIdCached`
- * is a module-scope `cacheablePerDb` keyed on the Postgres client, so the
- * message's own scope reaches the same process-lived cache ingest, http and
- * mcp read.
- */
-export interface IncomingEventBindings {
-  /**
-   * BullMQ-producer orchestration (notification/src/notification-dispatch.ts).
-   * Injected rather than imported so the hot path's per-message handler keeps
-   * the notification module out of its own import graph. Takes the message's
-   * own scope: an enqueue made here carries that message's requestId.
-   */
-  checkNotificationRulesForEvent(
-    deps: Ctx,
-    payload: IServiceCreateEventPayload
-  ): Promise<unknown>;
 }
 
 /**
  * Binds `IncomingEventDeps` to one message's scope. Synchronous by design —
  * the hot path gets no per-message `await` it did not already have.
  */
-export function createIncomingEventDeps(
-  ctx: Ctx,
-  bindings: IncomingEventBindings
-): IncomingEventDeps {
+export function createIncomingEventDeps(ctx: Ctx): IncomingEventDeps {
   return {
     logger: ctx.logger,
     sessions: ctx.buffers.session,
     createEvent: (payload) => createEvent(ctx, payload),
-    checkNotificationRulesForEvent: (payload) =>
-      bindings.checkNotificationRulesForEvent(ctx, payload),
     projects: {
       getCached: (projectId) => getProjectByIdCached(ctx, projectId),
-      getAiStoreContent: (projectId) =>
-        getProjectAiStoreContentCached(ctx, projectId),
       markFirstEvent: async (projectId) => {
         await ctx.db.project.updateMany({
           where: { id: projectId, firstEventAt: null },
@@ -175,9 +132,6 @@ export function createIncomingEventDeps(
     metrics: {
       sessionStarted: (kind) => sessionsStarted.inc({ kind }),
       sessionEndEnqueued: (source) => sessionEndsEnqueued.inc({ source }),
-    },
-    aiEvents: {
-      add: (row) => ctx.buffers.aiEvent.add(row),
     },
   };
 }
@@ -235,10 +189,7 @@ async function createEventAndNotify(
   }
 
   logger.info({ event: payload }, 'Creating event');
-  const [event] = await Promise.all([
-    deps.createEvent(payload),
-    deps.checkNotificationRulesForEvent(payload).catch(() => null),
-  ]);
+  const event = await deps.createEvent(payload);
   // Only after the event is accepted — recording the first event before a
   // failed createEvent would leave the activation checklist claiming data
   // arrived that was never persisted.
@@ -275,43 +226,7 @@ export async function incomingEvent(
         kafkaOffset: meta.offset,
       })
     : deps.logger;
-  const result = await ingestIncomingEvent(jobPayload, deps, logger);
-  if (jobPayload.ai && isStoredEvent(result)) {
-    await storeAiEvent(jobPayload, result.document, deps);
-  }
-  return result;
-}
-
-function isStoredEvent(
-  result: unknown
-): result is { document: AiEventIdentitySource } {
-  return (
-    typeof result === 'object' &&
-    result !== null &&
-    'document' in result &&
-    typeof result.document === 'object' &&
-    result.document !== null
-  );
-}
-
-/**
- * The `ai_events` row follows the `events` row, never precedes it: it copies
- * the identity and session the event resolved to, and an event the project
- * filters excluded leaves no ai row behind.
- */
-async function storeAiEvent(
-  jobPayload: IncomingEventPayload,
-  document: AiEventIdentitySource,
-  deps: IncomingEventDeps
-) {
-  if (!jobPayload.ai) {
-    return;
-  }
-  const storeContent =
-    (await deps.projects.getAiStoreContent(jobPayload.projectId)) !== false;
-  await deps.aiEvents.add(
-    buildAiEventRow(jobPayload.ai, document, { storeContent })
-  );
+  return await ingestIncomingEvent(jobPayload, deps, logger);
 }
 
 async function ingestIncomingEvent(
@@ -327,7 +242,6 @@ async function ingestIncomingEvent(
     deviceId,
     sessionId,
     uaInfo,
-    ai,
     // Producer-minted; a redelivered message re-creates the same row id.
     // Absent on messages produced before the field existed — createEvent then
     // falls back to a fresh uuid.
@@ -402,11 +316,10 @@ async function ingestIncomingEvent(
         : undefined,
   };
 
-  // Server-side, AI and "timestamp from the past" events ride alongside an
+  // Server-side and "timestamp from the past" events ride alongside an
   // existing client session if there is one — they don't open / close
-  // sessions of their own. AI counts as server-side even when the caller
-  // forwards a browser's user-agent.
-  if (uaInfo.isServer || isTimestampFromThePast || ai) {
+  // sessions of their own.
+  if (uaInfo.isServer || isTimestampFromThePast) {
     const session =
       profileId && !isTimestampFromThePast
         ? await deps.sessions.getExistingSession({ profileId, projectId })

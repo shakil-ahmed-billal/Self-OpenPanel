@@ -3,13 +3,9 @@ import type {
   IClickhouseBotEvent,
   IClickhouseEvent,
   IClickhouseProfile,
-  INotificationPayload,
 } from '@openpanel/core';
 import type { CohortDefinition } from '@openpanel/core/modules/cohort/cohort.constants';
-import type { IImportConfig } from '@openpanel/core/modules/import/import.constants';
 import type { InsightPayload } from '@openpanel/core/modules/insight/insight.constants';
-import type { IIntegrationConfig } from '@openpanel/core/modules/integration/integration.constants';
-import type { INotificationRuleConfig } from '@openpanel/core/modules/notification/notification.constants';
 import type { IOrganizationAttributionStored } from '@openpanel/core/modules/onboarding/onboarding.constants';
 import type { IProjectAccessGrant } from '@openpanel/core/modules/organization/organization.constants';
 import type { IProjectFilters } from '@openpanel/core/modules/project/project.constants';
@@ -20,10 +16,10 @@ import type {
 
 declare global {
   namespace PrismaJson {
-    type IPrismaImportConfig = IImportConfig;
-    type IPrismaNotificationRuleConfig = INotificationRuleConfig;
-    type IPrismaIntegrationConfig = IIntegrationConfig;
-    type IPrismaNotificationPayload = INotificationPayload;
+    type IPrismaImportConfig = Record<string, unknown>;
+    type IPrismaNotificationRuleConfig = Record<string, unknown>;
+    type IPrismaIntegrationConfig = Record<string, unknown>;
+    type IPrismaNotificationPayload = Record<string, unknown>;
     type IPrismaProjectFilters = IProjectFilters[];
     type IPrismaInviteProjectAccess = IProjectAccessGrant[];
     type IPrismaOrganizationAttribution = IOrganizationAttributionStored;

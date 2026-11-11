@@ -41,7 +41,6 @@ test('buffers reach the barrel as a factory, never as instances', () => {
     'profileBackfillBuffer',
     'botBuffer',
     'sessionBuffer',
-    'replayBuffer',
     'groupBuffer',
   ]) {
     expect(Object.keys(core)).not.toContain(instance);

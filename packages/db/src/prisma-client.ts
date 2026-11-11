@@ -1,15 +1,7 @@
-import { getSubscriptionState } from '@openpanel/payments/subscription-state';
 import { PrismaClient } from './generated/prisma/client';
 import { logger } from './logger';
 
 export * from './generated/prisma/client';
-
-const subscriptionStateNeeds = {
-  subscriptionStatus: true,
-  subscriptionCanceledAt: true,
-  subscriptionEndsAt: true,
-  subscriptionPauseAtPeriodEnd: true,
-} as const;
 
 const getPrismaClient = () => {
   // emit: 'event' keeps the engine from writing prisma:error lines straight
@@ -37,34 +29,21 @@ const getPrismaClient = () => {
     result: {
       organization: {
         subscriptionState: {
-          needs: subscriptionStateNeeds,
-          compute(org) {
-            return getSubscriptionState(org);
+          needs: { id: true },
+          compute() {
+            return 'self_hosted' as const;
           },
         },
         subscriptionStatus: {
-          needs: { subscriptionStatus: true, subscriptionCanceledAt: true },
-          compute(org) {
-            if (process.env.SELF_HOSTED === 'true') {
-              return 'active';
-            }
-
-            return org.subscriptionStatus || 'trialing';
+          needs: { id: true },
+          compute() {
+            return 'active';
           },
         },
         hasSubscription: {
-          needs: subscriptionStateNeeds,
-          compute(org) {
-            const state = getSubscriptionState(org);
-            return (
-              state === 'active' ||
-              state === 'canceling' ||
-              state === 'pausing' ||
-              state === 'paused' ||
-              state === 'past_due' ||
-              state === 'unpaid' ||
-              state === 'incomplete'
-            );
+          needs: { id: true },
+          compute() {
+            return false;
           },
         },
         slug: {
@@ -74,142 +53,57 @@ const getPrismaClient = () => {
           },
         },
         subscriptionChartEndDate: {
-          needs: {
-            subscriptionEndsAt: true,
-            subscriptionPeriodEventsCountExceededAt: true,
-          },
-          compute(org) {
-            if (process.env.SELF_HOSTED === 'true') {
-              return null;
-            }
-
-            if (
-              org.subscriptionEndsAt &&
-              org.subscriptionPeriodEventsCountExceededAt
-            ) {
-              return org.subscriptionEndsAt >
-                org.subscriptionPeriodEventsCountExceededAt
-                ? org.subscriptionPeriodEventsCountExceededAt
-                : org.subscriptionEndsAt;
-            }
-
-            if (org.subscriptionEndsAt) {
-              return org.subscriptionEndsAt;
-            }
-
-            return new Date(Date.now() + 1000 * 60 * 60 * 24);
+          needs: { id: true },
+          compute() {
+            return null;
           },
         },
         isActive: {
-          needs: subscriptionStateNeeds,
-          compute(org) {
-            const state = getSubscriptionState(org);
-            return state === 'active' || state === 'self_hosted';
+          needs: { id: true },
+          compute() {
+            return true;
           },
         },
         isTrial: {
-          needs: subscriptionStateNeeds,
-          compute(org) {
-            return getSubscriptionState(org) === 'trialing';
+          needs: { id: true },
+          compute() {
+            return false;
           },
         },
         isCanceled: {
-          needs: subscriptionStateNeeds,
-          compute(org) {
-            return getSubscriptionState(org) === 'canceled';
+          needs: { id: true },
+          compute() {
+            return false;
           },
         },
         isWillBeCanceled: {
-          needs: subscriptionStateNeeds,
-          compute(org) {
-            return getSubscriptionState(org) === 'canceling';
+          needs: { id: true },
+          compute() {
+            return false;
           },
         },
         isExpired: {
-          needs: subscriptionStateNeeds,
-          compute(org) {
-            const state = getSubscriptionState(org);
-            return state === 'expired' || state === 'trial_expired';
+          needs: { id: true },
+          compute() {
+            return false;
           },
         },
         isExceeded: {
-          needs: {
-            subscriptionPeriodEventsCount: true,
-            subscriptionPeriodEventsLimit: true,
-          },
-          compute(org) {
-            if (process.env.SELF_HOSTED === 'true') {
-              return false;
-            }
-
-            return (
-              org.subscriptionPeriodEventsCount >
-              org.subscriptionPeriodEventsLimit
-            );
+          needs: { id: true },
+          compute() {
+            return false;
           },
         },
         subscriptionCurrentPeriodStart: {
-          needs: { subscriptionStartsAt: true, subscriptionInterval: true },
-          compute(org) {
-            if (process.env.SELF_HOSTED === 'true') {
-              return null;
-            }
-
-            if (!org.subscriptionStartsAt) {
-              return null;
-            }
-
-            if (org.subscriptionInterval === 'year') {
-              const startDay = org.subscriptionStartsAt.getUTCDate();
-              const now = new Date();
-              return new Date(
-                Date.UTC(
-                  now.getUTCFullYear(),
-                  now.getUTCMonth(),
-                  startDay,
-                  0,
-                  0,
-                  0,
-                  0
-                )
-              );
-            }
-
-            return org.subscriptionStartsAt;
+          needs: { id: true },
+          compute() {
+            return null;
           },
         },
         subscriptionCurrentPeriodEnd: {
-          needs: {
-            subscriptionStartsAt: true,
-            subscriptionEndsAt: true,
-            subscriptionInterval: true,
-          },
-          compute(org) {
-            if (process.env.SELF_HOSTED === 'true') {
-              return null;
-            }
-
-            if (!org.subscriptionStartsAt) {
-              return null;
-            }
-
-            if (org.subscriptionInterval === 'year') {
-              const startDay = org.subscriptionStartsAt.getUTCDate();
-              const now = new Date();
-              return new Date(
-                Date.UTC(
-                  now.getUTCFullYear(),
-                  now.getUTCMonth() + 1,
-                  startDay - 1,
-                  0,
-                  0,
-                  0,
-                  0
-                )
-              );
-            }
-
-            return org.subscriptionEndsAt;
+          needs: { id: true },
+          compute() {
+            return null;
           },
         },
       },

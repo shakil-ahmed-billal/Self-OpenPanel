@@ -96,14 +96,6 @@ export {
 // `registry` itself is not exported: a caller that can reach it could start a
 // second collector graph outside a module.
 export { registerDefaultMetrics } from './metrics';
-export type {
-  IAiBreakdownRow,
-  IAiEntitySummary,
-  IAiMetrics,
-  IAiSeriesPoint,
-  IServiceAiEvent,
-  IServiceAiTrace,
-} from './modules/ai/ai.service';
 // Type-only: no value of the assistant module reaches a browser bundle.
 export type {
   AssistantUIMessage,
@@ -160,12 +152,6 @@ export type {
   IServiceDashboard,
   IServiceDashboards,
 } from './modules/dashboard/dashboard.service';
-export { emailCategories } from './modules/email/email.constants';
-export type {
-  SequenceStep,
-  SequenceSubject,
-} from './modules/email/src/sequence';
-export { runSequence, step } from './modules/email/src/sequence';
 export type {
   IClickhouseBotEvent,
   IClickhouseEvent,
@@ -192,7 +178,6 @@ export {
   getDeviceId,
   getOverrideDeviceId,
   getTimestamp,
-  handleReplay,
   ingestTrack,
   isBot,
   stripBotProperties,
@@ -213,10 +198,7 @@ export {
   enableEventsHeartbeat,
   markEventsActivity,
 } from './modules/ingest/src/heartbeat';
-export type {
-  IncomingEventBindings,
-  IncomingEventDeps,
-} from './modules/ingest/src/incoming-event-handler';
+export type { IncomingEventDeps } from './modules/ingest/src/incoming-event-handler';
 export { incomingEvent } from './modules/ingest/src/incoming-event-handler';
 export { ingestConsumerMetrics } from './modules/ingest/src/ingest.metrics';
 export type {
@@ -236,20 +218,7 @@ export {
   sampleConsumerGroupLag,
 } from './modules/ingest/src/kafka';
 export { explainInsight } from './modules/insight/insight.service';
-export { zSlackAuthResponse } from './modules/integration/src/slack-contract';
 export type { McpAuthContext } from './modules/mcp/mcp.service';
-export type { INotificationPayload } from './modules/notification/notification.service';
-export {
-  createNotificationService,
-  getFunnelRules,
-  getHasFunnelRules,
-  isBaseIntegration,
-  matchEvent,
-  matchEventFilters,
-  notificationTemplateEvent,
-  notificationTemplateFunnel,
-} from './modules/notification/notification.service';
-export { checkNotificationRulesForEvent } from './modules/notification/src/notification-dispatch';
 export { createOnboardingService } from './modules/onboarding/onboarding.service';
 export type {
   IServiceInvite,
@@ -274,8 +243,6 @@ export type {
   IServiceProjectWithClients,
 } from './modules/project/project.service';
 export { createProjectService } from './modules/project/project.service';
-export type { IServiceReference } from './modules/reference/reference.service';
-export { createReferenceService } from './modules/reference/reference.service';
 export {
   alphabetIds,
   chartColors,
@@ -336,7 +303,6 @@ export {
   zShareReport,
 } from './modules/share/share.constants';
 export { createShareService } from './modules/share/share.service';
-export { toSubscriptionDiscount } from './modules/subscription/subscription.service';
 export { runIpLookup } from './modules/tools/src/ip-lookup';
 export type { SiteCheckResult } from './modules/tools/src/site-checker';
 export { runSiteCheck } from './modules/tools/src/site-checker';

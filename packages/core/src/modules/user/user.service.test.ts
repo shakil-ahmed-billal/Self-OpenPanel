@@ -10,16 +10,7 @@ interface FakeUser {
   lastName: string | null;
 }
 
-interface FakeOrganization {
-  id: string;
-  name: string;
-  createdByUserId: string | null;
-  hasSubscription: boolean;
-  isWillBeCanceled: boolean;
-}
-
 const userStore = new Map<string, FakeUser>();
-const organizationStore = new Map<string, FakeOrganization>();
 
 function makeUser(overrides: Partial<FakeUser> & { id: string }): FakeUser {
   return {
@@ -79,24 +70,15 @@ const user = {
   }),
 };
 
-const organization = {
-  findMany: mock(async ({ where }: { where: { createdByUserId: string } }) =>
-    [...organizationStore.values()].filter(
-      (o) => o.createdByUserId === where.createdByUserId
-    )
-  ),
-};
-
 const subject = createUserService(
   {
-    db: { user, organization },
+    db: { user },
   } as unknown as ServiceDeps,
   testServices()
 );
 
 beforeEach(() => {
   userStore.clear();
-  organizationStore.clear();
 });
 
 test('getUserById returns the row', async () => {
@@ -124,50 +106,7 @@ test('updateUserProfile updates first and last name', async () => {
   expect(result).toMatchObject({ firstName: 'Ralph', lastName: 'Wiggum' });
 });
 
-test('listUserDeletionBlockers only returns orgs with a live, uncancelled subscription', async () => {
-  organizationStore.set('org_paying', {
-    id: 'org_paying',
-    name: 'Paying Co',
-    createdByUserId: 'user_1',
-    hasSubscription: true,
-    isWillBeCanceled: false,
-  });
-  organizationStore.set('org_canceling', {
-    id: 'org_canceling',
-    name: 'Canceling Co',
-    createdByUserId: 'user_1',
-    hasSubscription: true,
-    isWillBeCanceled: true,
-  });
-  organizationStore.set('org_free', {
-    id: 'org_free',
-    name: 'Free Co',
-    createdByUserId: 'user_1',
-    hasSubscription: false,
-    isWillBeCanceled: false,
-  });
-
-  const blockers = await subject.listUserDeletionBlockers('user_1');
-  expect(blockers).toEqual([{ id: 'org_paying', name: 'Paying Co' }]);
-});
-
-test('deleteUserAccount refuses while a blocking subscription exists', async () => {
-  userStore.set('user_1', makeUser({ id: 'user_1' }));
-  organizationStore.set('org_paying', {
-    id: 'org_paying',
-    name: 'Paying Co',
-    createdByUserId: 'user_1',
-    hasSubscription: true,
-    isWillBeCanceled: false,
-  });
-
-  await expect(subject.deleteUserAccount('user_1')).rejects.toThrow(
-    /Paying Co/
-  );
-  expect(userStore.has('user_1')).toBe(true);
-});
-
-test('deleteUserAccount deletes the row once no blocker remains', async () => {
+test('deleteUserAccount deletes the user row', async () => {
   userStore.set('user_1', makeUser({ id: 'user_1' }));
 
   await subject.deleteUserAccount('user_1');

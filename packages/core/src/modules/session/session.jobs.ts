@@ -1,14 +1,8 @@
 import { z } from 'zod';
-import { chQuery } from '../../ch-query';
 import type { Ctx } from '../../context';
 import { defineJob } from '../../jobs/define';
 import type { Logger } from '../../logger';
-import {
-  createEvent,
-  type IClickhouseEvent,
-  transformEvent,
-  transformSessionToEvent,
-} from '../event/event.service';
+import { createEvent } from '../event/event.service';
 import { sessionRuntimeFrom } from './src/runtime';
 import {
   createSessionEnd,
@@ -25,7 +19,6 @@ const SESSION_REAPER_INTERVAL_MS = 5 * MINUTE_MS;
 /** Daily 04:00 UTC — backstop for cleanup leaks. */
 const SESSION_VACUUM_CRON = '0 4 * * *';
 const FLUSH_SESSIONS_INTERVAL_MS = 10_000;
-const FLUSH_REPLAY_INTERVAL_MS = 10_000;
 
 // Wire-shape check only: tightening it would reject payloads currently accepted.
 //
@@ -48,36 +41,13 @@ const sessionEndPayload = z
   )
   .transform((value) => value as unknown as SessionEndJobWire);
 
-/**
- * The session-end job's dependencies, bound to the run's own ctx. Two lookups stay
- * dynamic to keep `notification.service.ts` out of jobs.registry.ts's eager import graph.
- */
-async function sessionEndDeps(
-  ctx: Ctx,
-  logger: Logger
-): Promise<SessionEndDeps> {
-  const [notifications, { checkNotificationRulesForSessionEnd }] =
-    await Promise.all([
-      import('../notification/notification.service'),
-      import('../notification/src/notification-dispatch'),
-    ]);
-
+/** The session-end job's dependencies, bound to the run's own ctx. */
+function sessionEndDeps(ctx: Ctx, logger: Logger): SessionEndDeps {
   return {
     ...sessionRuntimeFrom(ctx),
     logger,
     createEvent: (payload) => createEvent(ctx, payload),
-    transformEvent,
-    transformSessionToEvent,
-    getEvents: async (query) =>
-      (await chQuery<IClickhouseEvent>(ctx, query)).map(transformEvent),
     profileBackfill: ctx.buffers.profileBackfill,
-    notifications: {
-      getRules: (projectId) =>
-        notifications.getNotificationRulesByProjectId(ctx, projectId),
-      hasFunnelRules: notifications.getHasFunnelRules,
-      checkFunnelRules: (events) =>
-        checkNotificationRulesForSessionEnd(ctx, events),
-    },
   };
 }
 
@@ -93,7 +63,7 @@ export const sessionQueueJobs = {
         sessionId: data.snapshot.id,
       });
 
-      await createSessionEnd(data, await sessionEndDeps(ctx, logger));
+      await createSessionEnd(data, sessionEndDeps(ctx, logger));
 
       try {
         await updateEventsCount(ctx, data.event.projectId);
@@ -111,16 +81,6 @@ export const sessionCronJobs = {
     cron: { every: FLUSH_SESSIONS_INTERVAL_MS },
     handler: async ({ ctx }) => {
       await ctx.buffers.session.tryFlush({ trigger: 'cron' });
-    },
-  }),
-  // Session replay chunks are ingested onto this module's session id, so the
-  // replay buffer (Redis → ClickHouse `session_replay_chunks`) flushes here
-  // too, next to the sessions it belongs to.
-  flushReplay: defineJob({
-    payload: z.null(),
-    cron: { every: FLUSH_REPLAY_INTERVAL_MS },
-    handler: async ({ ctx }) => {
-      await ctx.buffers.replay.tryFlush({ trigger: 'cron' });
     },
   }),
   sessionReaper: defineJob({

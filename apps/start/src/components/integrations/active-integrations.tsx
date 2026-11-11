@@ -64,7 +64,7 @@ export function ActiveIntegrations() {
       {!isLoading && data.length === 0 && (
         <EmptyState
           className="md:col-span-2"
-          description="Connect Slack, Discord or a webhook to send notifications and data to the tools you already use."
+          description="Connect Discord or a webhook to send notifications and data to the tools you already use."
           icon={PlugIcon}
           title="No integrations yet"
         >

@@ -30,11 +30,8 @@ function stubJobCtx(
 ): JobCtx {
   const services: Services = {
     auth: {} as Services['auth'],
-    notification: {} as Services['notification'],
     insight: {} as Services['insight'],
-    integration: {} as Services['integration'],
     cohort: {} as Services['cohort'],
-    import: {} as Services['import'],
     ingest: {} as Services['ingest'],
     gsc: gsc as ReturnType<typeof createGscService>,
     organization: {} as Services['organization'],
@@ -57,16 +54,13 @@ function stubJobCtx(
     dashboard: {} as Services['dashboard'],
     export: {} as Services['export'],
     share: {} as Services['share'],
-    reference: {} as Services['reference'],
     client: {} as Services['client'],
     project: {} as Services['project'],
     user: {} as Services['user'],
-    subscription: {} as Services['subscription'],
     salt: {} as Services['salt'],
     conversation: {} as Services['conversation'],
     assistant: {} as Services['assistant'],
     mcp: {} as Services['mcp'],
-    ai: {} as Services['ai'],
   };
   return {
     auth: null,
@@ -161,11 +155,8 @@ test('gscSync fans out one gscProjectSync enqueue per connected project', async 
     config: testCoreConfig(),
     services: {
       auth: {} as Services['auth'],
-      notification: {} as Services['notification'],
       insight: {} as Services['insight'],
-      integration: {} as Services['integration'],
       cohort: {} as Services['cohort'],
-      import: {} as Services['import'],
       ingest: {} as Services['ingest'],
       gsc: {
         listConnectionsForSync: async () => [
@@ -193,16 +184,13 @@ test('gscSync fans out one gscProjectSync enqueue per connected project', async 
       dashboard: {} as Services['dashboard'],
       export: {} as Services['export'],
       share: {} as Services['share'],
-      reference: {} as Services['reference'],
       client: {} as Services['client'],
       project: {} as Services['project'],
       user: {} as Services['user'],
-      subscription: {} as Services['subscription'],
       salt: {} as Services['salt'],
       conversation: {} as Services['conversation'],
       assistant: {} as Services['assistant'],
       mcp: {} as Services['mcp'],
-      ai: {} as Services['ai'],
     },
     requestId: 'req_1',
     job: { id: 'job_1', attempt: 0, queue: 'cron', name: 'gscSync' },

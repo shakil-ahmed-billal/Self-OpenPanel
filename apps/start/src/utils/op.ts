@@ -12,9 +12,6 @@ export const op = new OpenPanel({
   trackOutgoingLinks: true,
   trackAttributes: true,
   filter: shouldSendAnalyticsEvent,
-  // sessionReplay: {
-  //   enabled: true,
-  // }
 });
 
 // Every funnel event carries the marketing first touch, so sign-ups and

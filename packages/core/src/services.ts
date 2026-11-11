@@ -1,5 +1,4 @@
 import type { Ctx } from './context';
-import { createAiService } from './modules/ai/ai.service';
 import { createAssistantService } from './modules/assistant/assistant.service';
 import { createAuthService } from './modules/auth/auth.service';
 import { createChartService } from './modules/chart/chart.service';
@@ -16,13 +15,10 @@ import { createEventService } from './modules/event/event.service';
 import { createExportService } from './modules/export/export.service';
 import { createGroupService } from './modules/group/group.service';
 import { createGscService } from './modules/gsc/gsc.service';
-import { createImportService } from './modules/import/import.service';
 import { createIngestService } from './modules/ingest/ingest.service';
 import { createInsightService } from './modules/insight/insight.service';
-import { createIntegrationService } from './modules/integration/integration.service';
 import { createMcpService } from './modules/mcp/mcp.service';
 import { createMiscService } from './modules/misc/misc.service';
-import { createNotificationService } from './modules/notification/notification.service';
 import { createOnboardingService } from './modules/onboarding/onboarding.service';
 import { createOrganizationService } from './modules/organization/organization.service';
 import { createOverviewService } from './modules/overview/overview.service';
@@ -30,12 +26,10 @@ import { createPagesService } from './modules/overview/pages.service';
 import { createProfileService } from './modules/profile/profile.service';
 import { createProjectService } from './modules/project/project.service';
 import { createRealtimeService } from './modules/realtime/realtime.service';
-import { createReferenceService } from './modules/reference/reference.service';
 import { createReportService } from './modules/report/report.service';
 import { createSaltService } from './modules/salt/salt.service';
 import { createSessionService } from './modules/session/session.service';
 import { createShareService } from './modules/share/share.service';
-import { createSubscriptionService } from './modules/subscription/subscription.service';
 import { createUserService } from './modules/user/user.service';
 
 /** What every service factory receives, derived from Ctx so it cannot drift. */
@@ -63,18 +57,14 @@ export interface Services {
   insight: ReturnType<typeof createInsightService>;
   gsc: ReturnType<typeof createGscService>;
   cohort: ReturnType<typeof createCohortService>;
-  import: ReturnType<typeof createImportService>;
   ingest: ReturnType<typeof createIngestService>;
   organization: ReturnType<typeof createOrganizationService>;
-  integration: ReturnType<typeof createIntegrationService>;
   onboarding: ReturnType<typeof createOnboardingService>;
-  notification: ReturnType<typeof createNotificationService>;
   session: ReturnType<typeof createSessionService>;
   customEvent: ReturnType<typeof createCustomEventService>;
   event: ReturnType<typeof createEventService>;
   profile: ReturnType<typeof createProfileService>;
   group: ReturnType<typeof createGroupService>;
-  ai: ReturnType<typeof createAiService>;
   chart: ReturnType<typeof createChartService>;
   // One key per `*.service.ts`. `chart` keeps the composed facade its callers
   // use; the factories build stateless closures over `deps`, so binding a
@@ -91,11 +81,9 @@ export interface Services {
   dashboard: ReturnType<typeof createDashboardService>;
   export: ReturnType<typeof createExportService>;
   share: ReturnType<typeof createShareService>;
-  reference: ReturnType<typeof createReferenceService>;
   client: ReturnType<typeof createClientService>;
   project: ReturnType<typeof createProjectService>;
   user: ReturnType<typeof createUserService>;
-  subscription: ReturnType<typeof createSubscriptionService>;
   salt: ReturnType<typeof createSaltService>;
   conversation: ReturnType<typeof createConversationService>;
   assistant: ReturnType<typeof createAssistantService>;
@@ -114,18 +102,14 @@ export function createServices(deps: ServiceDeps): Services {
     insight: createInsightService(deps, services),
     gsc: createGscService(deps, services),
     cohort: createCohortService(deps, services),
-    import: createImportService(deps, services),
     ingest: createIngestService(deps, services),
     organization: createOrganizationService(deps, services),
-    integration: createIntegrationService(deps, services),
     onboarding: createOnboardingService(deps, services),
-    notification: createNotificationService(deps, services),
     session: createSessionService(deps, services),
     customEvent: createCustomEventService(deps, services),
     event: createEventService(deps, services),
     profile: createProfileService(deps, services),
     group: createGroupService(deps, services),
-    ai: createAiService(deps, services),
     chart: createChartService(deps, services),
     funnel: createFunnelService(deps, services),
     conversion: createConversionService(deps, services),
@@ -139,11 +123,9 @@ export function createServices(deps: ServiceDeps): Services {
     dashboard: createDashboardService(deps, services),
     export: createExportService(deps, services),
     share: createShareService(deps, services),
-    reference: createReferenceService(deps, services),
     client: createClientService(deps, services),
     project: createProjectService(deps, services),
     user: createUserService(deps, services),
-    subscription: createSubscriptionService(deps, services),
     salt: createSaltService(deps, services),
     conversation: createConversationService(deps, services),
     assistant: createAssistantService(deps, services),

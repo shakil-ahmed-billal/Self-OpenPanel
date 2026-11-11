@@ -99,35 +99,6 @@ const LEGACY_CASES: LegacyCase[] = [
     },
   },
   {
-    queue: 'notification',
-    wireName: 'sendNotification',
-    data: {
-      type: 'sendNotification',
-      payload: {
-        notification: {
-          projectId: 'proj_m9001',
-          title: 'legacy',
-          message: 'still processed',
-        },
-      },
-    },
-    expectJob: 'sendNotification',
-    expectPayload: {
-      notification: {
-        projectId: 'proj_m9001',
-        title: 'legacy',
-        message: 'still processed',
-      },
-    },
-  },
-  {
-    queue: 'import',
-    wireName: 'import',
-    data: { type: 'import', payload: { importId: 'imp_m9001' } },
-    expectJob: 'import',
-    expectPayload: { importId: 'imp_m9001' },
-  },
-  {
     queue: 'insights',
     wireName: 'insightsProject',
     data: {

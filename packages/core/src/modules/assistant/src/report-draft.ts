@@ -3,7 +3,6 @@
 import { generateText, isStepCount, tool } from 'ai';
 import { z } from 'zod';
 import type { ServiceDeps } from '../../../services';
-import { withAiContext } from '../../ai/ai.service';
 import {
   type IChartRange,
   type IReportInput,
@@ -253,22 +252,14 @@ export async function runReportDraft(
       },
     }),
   };
-  const result = await withAiContext(
-    {
-      profileId: input.userId,
-      name: 'report-draft',
-      properties: { projectId: input.projectId, modelId: resolved.entry.id },
-    },
-    () =>
-      generateText({
-        model: resolved.model,
-        instructions: instructions(input),
-        prompt: input.prompt,
-        tools,
-        stopWhen: [isStepCount(MAX_STEPS), () => accepted !== null],
-        reasoning: resolved.entry.reasoning,
-      })
-  );
+  const result = await generateText({
+    model: resolved.model,
+    instructions: instructions(input),
+    prompt: input.prompt,
+    tools,
+    stopWhen: [isStepCount(MAX_STEPS), () => accepted !== null],
+    reasoning: resolved.entry.reasoning,
+  });
   deps.logger.info(
     {
       projectId: input.projectId,

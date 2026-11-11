@@ -4,7 +4,6 @@
 
 import { type SqlFragment, sql } from '@openpanel/db/src/clickhouse/sql';
 import { toRangeBoundaryLiteral } from '../../../shared/ch-dates';
-import { AI_INTERNAL_EVENT_NAMES } from '../../ai/ai.constants';
 import {
   type CompiledFilterClauses,
   compiledFilterFragments,
@@ -16,6 +15,7 @@ const TABLE = {
   sessions: 'sessions',
 } as const;
 
+const AI_INTERNAL_EVENT_NAMES = ['ai_trace', 'ai_span', 'ai_embedding'] as const;
 const NOT_AI_INTERNAL = sql`name NOT IN ${sql.array('String', AI_INTERNAL_EVENT_NAMES)}`;
 
 export const PROFILE_COLUMNS = [

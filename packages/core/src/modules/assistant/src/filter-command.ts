@@ -5,7 +5,6 @@ import { resolveDateRange as resolveDateRangeCore } from '@openpanel/shared';
 import { generateText, isStepCount, Output, tool } from 'ai';
 import { z } from 'zod';
 import type { ServiceDeps } from '../../../services';
-import { withAiContext } from '../../ai/ai.service';
 import { listEventNamesCore } from '../../event/event.service';
 import { getTrafficBreakdownCore } from '../../overview/overview.service';
 import { getTopPagesCore } from '../../overview/pages.service';
@@ -241,23 +240,15 @@ export async function runFilterCommand(
       'No AI provider is configured: set OPENAI_API_KEY or ANTHROPIC_API_KEY.'
     );
   }
-  const result = await withAiContext(
-    {
-      profileId: input.userId,
-      name: 'filter-command',
-      properties: { projectId: input.projectId },
-    },
-    () =>
-      generateText({
-        model,
-        instructions: instructions(input),
-        prompt: input.query,
-        tools: lookupTools(deps, input),
-        stopWhen: isStepCount(MAX_STEPS),
-        reasoning: 'low',
-        output: Output.object({ schema: filterCommandOutputSchema }),
-      })
-  );
+  const result = await generateText({
+    model,
+    instructions: instructions(input),
+    prompt: input.query,
+    tools: lookupTools(deps, input),
+    stopWhen: isStepCount(MAX_STEPS),
+    reasoning: 'low',
+    output: Output.object({ schema: filterCommandOutputSchema }),
+  });
   if (!result.output) {
     return {
       applyFilters: null,

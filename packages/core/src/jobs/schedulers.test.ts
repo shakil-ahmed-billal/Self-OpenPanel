@@ -7,31 +7,26 @@ import {
   startSchedulers,
 } from './schedulers';
 
-// Byte-identity snapshot: these 22 scheduler ids must not change without a
+// Byte-identity snapshot: these 17 scheduler ids must not change without a
 // migration, since BullMQ persists them as job-scheduler keys in Redis.
 const GOLDEN_SCHEDULER_IDS = [
   'cohortRefresh',
   'dataHealth',
   'delete',
-  'flushAiEvents',
   'flushBots',
   'flushEvents',
-  'flushExports',
   'flushGroups',
   'flushProfileBackfill',
   'flushProfiles',
-  'flushReplay',
   'flushSessions',
   'gscSync',
   'insightCleanup',
   'insightsDaily',
-  'onboarding',
   'ping',
   'salt',
   'sessionReaper',
   'sessionVacuum',
   'weeklyDigest',
-  'windDown',
 ].sort();
 
 function stubLogger(): Logger {
@@ -101,15 +96,13 @@ function fakeQueue(options?: {
 test('the golden scheduler ids are reproduced byte-for-byte', () => {
   const allIds = [...CRON_SCHEDULES.map((s) => s.id), PING_SCHEDULE.id].sort();
 
-  expect(allIds).toHaveLength(22);
+  expect(allIds).toHaveLength(17);
   expect(allIds).toEqual(GOLDEN_SCHEDULER_IDS);
 });
 
-test('the three ADR-005 fixed omissions are present', () => {
+test('the dataHealth scheduler is present', () => {
   const ids = new Set(CRON_SCHEDULES.map((s) => s.id));
   expect(ids.has('dataHealth')).toBe(true);
-  expect(ids.has('windDown')).toBe(true);
-  expect(ids.has('flushExports')).toBe(true);
 });
 
 test('ping is excluded by default — neither self-hosted nor production', async () => {

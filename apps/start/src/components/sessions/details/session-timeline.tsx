@@ -1,6 +1,5 @@
 import type { IServiceEvent } from '@openpanel/core';
 import { ListTreeIcon, ZapIcon } from 'lucide-react';
-import { formatDuration } from '../replay/replay-utils';
 import { getElapsedMs, type SessionPageVisit } from './session-pages';
 import { EmptyState } from '@/components/empty-state';
 import { EventIcon } from '@/components/events/event-icon';
@@ -13,6 +12,13 @@ import { formatTime } from '@/utils/date';
 const MS_PER_SECOND = 1000;
 const MAX_PROPERTY_CHIPS = 3;
 const MAX_CHIP_VALUE_LENGTH = 32;
+
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / MS_PER_SECOND));
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
 
 function getPropertyChips(event: IServiceEvent): [string, string][] {
   return Object.entries(event.properties ?? {})

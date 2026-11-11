@@ -39,7 +39,6 @@ COPY . .
 
 # The tracking script the self-hosted dashboard serves.
 # COPY apps/public/public/op1.js ./apps/start/public/op1.js
-# COPY apps/public/public/op1-replay.js ./apps/start/public/op1-replay.js
 
 # BUILD — Nitro's standalone server output. NITRO=1 selects the node-server
 # preset over the Cloudflare one; SELF_HOSTED=1 is read at build time.

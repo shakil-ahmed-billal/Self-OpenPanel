@@ -20,13 +20,7 @@ import {
   type IIntegrationConfig,
   looksEncrypted,
 } from '../integration.constants';
-import {
-  createGCSAdapter,
-  createS3Adapter,
-  type IObjectStoreAdapter,
-} from './object-store';
 import { safeWebhookFetcher } from './safe-fetcher';
-import { sendSlackNotification } from './slack';
 
 /** Narrow the integration config union to one `type`. */
 export type ConfigOf<T extends IIntegrationConfig['type']> = Extract<
@@ -61,12 +55,6 @@ export interface IServerIntegration<T extends IIntegrationConfig['type']> {
   // Notification sink (delivered when a notification rule matches).
   notification?: {
     deliver(args: INotificationDeliverArgs<T>): Promise<unknown> | unknown;
-  };
-  export?: {
-    createAdapter(
-      config: ConfigOf<T>,
-      coreConfig: CoreConfig
-    ): IObjectStoreAdapter;
   };
   // Optional synchronous config validation run before persisting (e.g. webhook
   // JS template). Returning invalid rejects the create/update.
@@ -143,28 +131,6 @@ async function deliverWebhook(
   }
   return result;
 }
-
-const slackServer: IServerIntegration<'slack'> = {
-  type: 'slack',
-  // The bot token and the incoming-webhook URL are both bearer credentials for
-  // the customer's Slack workspace. Redact-only: the worker reads them raw, and
-  // nothing round-trips them (the OAuth callback rewrites the whole config), so
-  // there is no carry-over to worry about.
-  secretFields: [{ path: 'access_token' }, { path: 'incoming_webhook.url' }],
-  notification: {
-    deliver: ({ config, notification }) =>
-      deliverWebhook(
-        'slack',
-        sendSlackNotification({
-          fetcher: safeWebhookFetcher,
-          webhookUrl: config.incoming_webhook.url,
-          message: [`🔔 *${notification.title}*`, notification.message].join(
-            '\n'
-          ),
-        })
-      ),
-  },
-};
 
 const discordServer: IServerIntegration<'discord'> = {
   type: 'discord',
@@ -243,37 +209,13 @@ const webhookServer: IServerIntegration<'webhook'> = {
   },
 };
 
-const s3Server: IServerIntegration<'s3_export'> = {
-  type: 's3_export',
-  export: {
-    createAdapter: (config, coreConfig) => createS3Adapter(config, coreConfig),
-  },
-  testConnection: (config, coreConfig) =>
-    createS3Adapter(config, coreConfig).testConnection(),
-  // Absent in iam_role configs; the generic helpers skip keys that aren't there.
-  secretFields: [{ path: 'secretAccessKey', encrypted: true }],
-};
-
-const gcsServer: IServerIntegration<'gcs_export'> = {
-  type: 'gcs_export',
-  export: {
-    createAdapter: (config, coreConfig) => createGCSAdapter(config, coreConfig),
-  },
-  testConnection: (config, coreConfig) =>
-    createGCSAdapter(config, coreConfig).testConnection(),
-  secretFields: [{ path: 'serviceAccountKey', encrypted: true }],
-};
-
 export const SERVER_INTEGRATIONS = {
-  slack: slackServer,
   discord: discordServer,
   webhook: webhookServer,
   // Pseudo-integrations dispatched by sendToApp/sendToEmail flags before the
   // registry lookup; no server delivery handler of their own.
   app: { type: 'app' },
   email: { type: 'email' },
-  s3_export: s3Server,
-  gcs_export: gcsServer,
 } satisfies {
   [T in IIntegrationConfig['type']]: IServerIntegration<T>;
 };

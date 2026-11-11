@@ -199,7 +199,7 @@ function Component() {
     trackFunnel('onboarding_project_viewed', { hasWorkspaces });
   }, [hasWorkspaces]);
 
-  // The workspace is the billing unit, not something a new user should have
+  // The workspace is not something a new user should have
   // to name before seeing a single chart: it follows the project name until
   // they edit it themselves.
   useEffect(() => {
@@ -492,7 +492,7 @@ function Component() {
             <div className="grid gap-4 pt-3 sm:grid-cols-2">
               <InputWithLabel
                 error={form.formState.errors.organization?.message}
-                hint="Your team and billing live here."
+                hint="Your team and projects live here."
                 label="Workspace name"
                 placeholder="Acme Inc"
                 size="xl"

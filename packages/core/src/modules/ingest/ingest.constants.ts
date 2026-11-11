@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { type IAiPayload, zAiPayload } from '../ai/ai.constants';
 import {
   MAX_GROUP_ID_LENGTH,
   MAX_GROUPS_PER_EVENT,
@@ -187,28 +186,15 @@ export interface IAliasPayload {
   alias: string;
 }
 
-export interface IReplayPayload {
-  chunk_index: number;
-  events_count: number;
-  is_full_snapshot: boolean;
-  started_at: string;
-  ended_at: string;
-  payload: string;
-  // Server-issued session id (from a prior /track response) the SDK echoes back,
-  // so the chunk is filed under the right session without device resolution.
-  sessionId?: string;
-}
-
 export type ITrackHandlerPayload =
   | { type: 'track'; payload: ITrackPayload }
   | { type: 'identify'; payload: IIdentifyPayload }
   | { type: 'increment'; payload: IIncrementPayload }
   | { type: 'decrement'; payload: IDecrementPayload }
   | { type: 'alias'; payload: IAliasPayload }
-  | { type: 'replay'; payload: IReplayPayload }
   | { type: 'group'; payload: IGroupPayload }
   | { type: 'assign_group'; payload: IAssignGroupPayload }
-  | { type: 'ai'; payload: IAiPayload };
+;
 
 export const zProfileId = z.union([
   z.string().min(1),
@@ -315,16 +301,6 @@ export const zAliasPayload = z.object({
   alias: z.string().min(1),
 }) satisfies z.ZodType<IAliasPayload>;
 
-export const zReplayPayload = z.object({
-  chunk_index: z.number().int().min(0).max(65_535),
-  events_count: z.number().int().min(1),
-  is_full_snapshot: z.boolean(),
-  started_at: z.string().datetime(),
-  ended_at: z.string().datetime(),
-  payload: z.string().max(1_048_576 * 2), // 2MB max
-  sessionId: z.string().max(64).optional(),
-}) satisfies z.ZodType<IReplayPayload>;
-
 export const zTrackHandlerPayload = z.discriminatedUnion('type', [
   z
     .object({
@@ -358,12 +334,6 @@ export const zTrackHandlerPayload = z.discriminatedUnion('type', [
     .meta({ title: 'Alias' }),
   z
     .object({
-      type: z.enum(['replay']),
-      payload: zReplayPayload,
-    })
-    .meta({ title: 'Replay' }),
-  z
-    .object({
       type: z.enum(['group']),
       payload: zGroupPayload,
     })
@@ -374,12 +344,6 @@ export const zTrackHandlerPayload = z.discriminatedUnion('type', [
       payload: zAssignGroupPayload,
     })
     .meta({ title: 'Assign Group' }),
-  z
-    .object({
-      type: z.enum(['ai']),
-      payload: zAiPayload,
-    })
-    .meta({ title: 'AI' }),
 ]) satisfies z.ZodType<ITrackHandlerPayload>;
 
 // Deprecated types for beta version of the SDKs

@@ -180,24 +180,6 @@ import { OpenPanelComponent } from '@openpanel/astro';
         language: 'bash',
       },
     ],
-    'react-native': (context) => [
-      {
-        title: 'Install',
-        code: `npm install @openpanel/react-native
-npx expo install expo-application expo-constants`,
-        language: 'bash',
-      },
-      {
-        title: 'Initialize',
-        language: 'typescript',
-        code: `import { OpenPanel } from '@openpanel/react-native';
-
-export const op = new OpenPanel({${apiUrlLine(context, '  ')}
-  clientId: '${context.clientId}',
-  clientSecret: '${secretOf(context)}',
-});`,
-      },
-    ],
     node: serverSdkSnippets,
     express: (context) => [
       {
@@ -274,43 +256,6 @@ OPENPANEL_CLIENT_SECRET=${secretOf(context)}`,
 
 tracker = OpenPanel::SDK::Tracker.new
 tracker.track('my_event', { foo: 'bar' })`,
-      },
-    ],
-    ios: (context) => [
-      {
-        title: 'Add the Swift package',
-        code: 'https://github.com/Openpanel-dev/swift-sdk',
-        language: 'bash',
-      },
-      {
-        title: 'Initialize',
-        language: 'typescript',
-        code: `import OpenPanel
-
-OpenPanel.initialize(options: .init(${context.apiUrl ? `\n    apiUrl: "${context.apiUrl}",` : ''}
-    clientId: "${context.clientId}",
-    clientSecret: "${secretOf(context)}"
-))`,
-      },
-    ],
-    android: (context) => [
-      {
-        title: 'Add the dependency',
-        code: `dependencies {
-    implementation 'dev.openpanel:openpanel:0.0.1'
-}`,
-        language: 'bash',
-      },
-      {
-        title: 'Initialize',
-        language: 'typescript',
-        code: `val op = OpenPanel.create(
-    context,
-    OpenPanel.Options(${context.apiUrl ? `\n        apiUrl = "${context.apiUrl}",` : ''}
-        clientId = "${context.clientId}",
-        clientSecret = "${secretOf(context)}"
-    )
-)`,
       },
     ],
   };

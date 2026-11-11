@@ -10,7 +10,6 @@ import {
 } from '../charts/op-stat-hover-bridge';
 import { PreviousDiffIndicatorPure } from '../report-chart/common/previous-diff-indicator';
 import { Skeleton } from '../skeleton';
-import { formatCost, formatLatency } from '@/components/ai/ai-format';
 import { useFormatDateInterval } from '@/hooks/use-format-date-interval';
 import { fancyMinutes, useNumber } from '@/hooks/use-numer-formatter';
 import { cn } from '@/utils/cn';
@@ -30,9 +29,7 @@ export type MetricUnit =
   | 'timeAgo'
   | 'min'
   | '%'
-  | 'currency'
-  | 'usd'
-  | 'ms';
+  | 'currency';
 
 interface MetricCardProps {
   id: string;
@@ -219,14 +216,6 @@ function MetricValue({ value, unit }: { value: number; unit?: MetricUnit }) {
 
   if (unit === 'min') {
     return <span className={VALUE_CLASS}>{fancyMinutes(value)}</span>;
-  }
-
-  if (unit === 'usd') {
-    return <span className={VALUE_CLASS}>{formatCost(value)}</span>;
-  }
-
-  if (unit === 'ms') {
-    return <span className={VALUE_CLASS}>{formatLatency(value)}</span>;
   }
 
   if (unit === 'currency') {

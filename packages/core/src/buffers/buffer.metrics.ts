@@ -30,7 +30,6 @@ function allBuffers(buffers: Buffers) {
     buffers.profile,
     buffers.bot,
     buffers.session,
-    buffers.replay,
     buffers.group,
     buffers.profileBackfill,
   ];

@@ -58,34 +58,6 @@ describe('cron', () => {
   });
 });
 
-describe('notification', () => {
-  test('{type:sendNotification, payload} keeps the wire job name', () => {
-    const notification = { projectId: 'proj_1', payload: {} };
-
-    expect(
-      resolveJob(queues.notification, {
-        name: 'sendNotification',
-        data: { type: 'sendNotification', payload: { notification } },
-      })
-    ).toEqual({
-      job: 'sendNotification',
-      payload: { notification },
-      meta: {},
-    });
-  });
-});
-
-describe('import', () => {
-  test('{type:import, payload:{importId}}', () => {
-    expect(
-      resolveJob(queues.import, {
-        name: 'import',
-        data: { type: 'import', payload: { importId: 'imp_1' } },
-      })
-    ).toEqual({ job: 'import', payload: { importId: 'imp_1' }, meta: {} });
-  });
-});
-
 describe('insights', () => {
   test('{type:insightsProject, payload:{projectId,date}}', () => {
     expect(
@@ -150,13 +122,16 @@ describe('cohortCompute', () => {
 describe('the envelope path', () => {
   test('an envelope is taken as-is and keeps the BullMQ job name', () => {
     expect(
-      resolveJob(queues.import, {
-        name: 'import',
-        data: wrap({ importId: 'imp_1' }, { requestId: 'req_1' }),
+      resolveJob(queues.insights, {
+        name: 'insightsProject',
+        data: wrap(
+          { projectId: 'proj_1', date: '2026-09-01' },
+          { requestId: 'req_1' }
+        ),
       })
     ).toEqual({
-      job: 'import',
-      payload: { importId: 'imp_1' },
+      job: 'insightsProject',
+      payload: { projectId: 'proj_1', date: '2026-09-01' },
       meta: { requestId: 'req_1' },
     });
   });
@@ -178,8 +153,6 @@ describe('unresolvable jobs', () => {
   test.each([
     ['sessions' as const, { nope: true }],
     ['cron' as const, { payload: { a: 1 } }],
-    ['notification' as const, 'a string'],
-    ['import' as const, null],
     ['insights' as const, { type: 'somethingElse', payload: {} }],
     ['gsc' as const, { type: 'gscSomethingElse', payload: {} }],
     ['cohortCompute' as const, { notACohortId: 'x' }],

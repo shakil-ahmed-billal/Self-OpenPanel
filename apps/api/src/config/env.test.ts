@@ -29,13 +29,11 @@ describe('ENABLED_QUEUES', () => {
     expect(loadConfig(base).ENABLED_QUEUES).toEqual([...ENABLED_QUEUE_VALUES]);
   });
 
-  it('covers the Kafka token plus the seven registry queues', () => {
+  it('covers the Kafka token plus the five registry queues', () => {
     expect(ENABLED_QUEUE_VALUES).toEqual([
       'events',
       'sessions',
       'cron',
-      'notification',
-      'import',
       'insights',
       'gsc',
       'cohortCompute',

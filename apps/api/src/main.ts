@@ -14,7 +14,6 @@ import {
   type BufferDeps,
   bullBoardRoutes,
   CRON_SCHEDULES,
-  checkNotificationRulesForEvent,
   cookieOptions,
   corsDelegator,
   createAuth,
@@ -252,11 +251,8 @@ async function startIngestConsumer(
     partitionsConsumedConcurrently: config.core.kafka.partitionsConcurrent,
     batch: {
       // One Ctx per message, scoped to the requestId the producer stamped into
-      // the envelope. The one binding a work scope cannot supply is resolved
-      // here, once: the notification dispatch has no Ctx slot in its signature.
-      handleEvent: createIncomingEventHandler(deps, {
-        checkNotificationRulesForEvent,
-      }),
+      // the envelope.
+      handleEvent: createIncomingEventHandler(deps),
       // A capped Redis list, and the event is DROPPED whether or not the record lands: a Kafka DLQ topic nothing creates
       // held the offset back in a redelivery loop. The CACHE client, not the queue client: only that one fails fast, and
       // failing fast is the point here.

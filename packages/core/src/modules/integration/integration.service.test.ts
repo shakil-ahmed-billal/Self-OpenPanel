@@ -12,7 +12,6 @@ import {
   beforeEach,
   expect,
   mock,
-  spyOn,
   test,
 } from 'bun:test';
 import { testCoreConfig } from '../../../test/config-fixture';
@@ -39,20 +38,6 @@ mock.module('../../shared/access-lookups', () => ({
   canWriteProject: (access: { level: string } | null) =>
     !!access && (access.level === 'write' || access.level === 'admin'),
   getProjectById: mock(async () => ({ organizationId: 'org_1' })),
-}));
-
-let slackStateMetadata: Record<string, string> = {};
-const slackCodeExchange = mock(async () => new Response('{}'));
-const realSlack = { ...(await import('./src/slack')) };
-mock.module('./src/slack', () => ({
-  ...realSlack,
-  slackInstaller: () => ({
-    stateStore: {
-      verifyStateParam: async () => ({
-        metadata: JSON.stringify(slackStateMetadata),
-      }),
-    },
-  }),
 }));
 
 const integration = {
@@ -113,7 +98,6 @@ beforeAll(async () => {
 });
 
 afterAll(() => {
-  mock.module('./src/slack', () => realSlack);
   mock.module('../../shared/access-lookups', () => realAccessLookups);
   resetAccessChecksForTests();
 });
@@ -145,33 +129,14 @@ function storeWebhook(id = 'int_1'): FakeIntegration {
   return row;
 }
 
-function storeSlack(id = 'int_slack'): FakeIntegration {
-  const row: FakeIntegration = {
-    id,
-    name: 'Slack',
-    projectId: 'proj_1',
-    organizationId: 'org_1',
-    config: {
-      type: 'slack',
-      access_token: 'xoxb-secret',
-      incoming_webhook: { url: 'https://hooks.slack.com/T/B/secret' },
-    },
-  };
-  integrationStore.set(id, row);
-  return row;
-}
-
 test('list returns no credential values to a read-level project member', async () => {
   storeWebhook();
-  storeSlack();
   projectAccessLevel = 'read';
 
   const rows = await subject.listIntegrationsForProject(deps, 'u1', 'proj_1');
   const serialized = JSON.stringify(rows);
 
   expect(serialized).not.toContain('very-secret');
-  expect(serialized).not.toContain('xoxb-secret');
-  expect(serialized).not.toContain('/T/B/secret');
   // Non-secret config the dashboard renders survives; header KEYS stay so the
   // form shows which headers are configured.
   const hook = rows.find((row) => row.id === 'int_1');
@@ -183,13 +148,16 @@ test('list returns no credential values to a read-level project member', async (
 });
 
 test('get returns no credential values', async () => {
-  storeSlack();
+  storeWebhook();
   projectAccessLevel = 'read';
 
-  const row = await subject.getIntegrationById(deps, 'u1', 'int_slack');
+  const row = await subject.getIntegrationById(deps, 'u1', 'int_1');
 
-  expect(JSON.stringify(row)).not.toContain('xoxb-secret');
-  expect(row.config).toMatchObject({ type: 'slack', access_token: '' });
+  expect(JSON.stringify(row)).not.toContain('very-secret');
+  expect(row.config).toMatchObject({
+    type: 'webhook',
+    headers: { Authorization: '', 'X-Trace': '' },
+  });
 });
 
 test('createOrUpdate does not echo the submitted header values back', async () => {
@@ -264,40 +232,4 @@ test('createOrUpdate does not send stored header values to a new URL', async () 
   expect(integrationStore.get('int_1')?.config).toMatchObject({
     url: 'https://example.com/hook',
   });
-});
-
-test('the Slack callback refuses an install started by another user', async () => {
-  storeSlack();
-  slackStateMetadata = {
-    organizationId: 'org_1',
-    integrationId: 'int_slack',
-    projectId: 'proj_1',
-    userId: 'u_initiator',
-  };
-  const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(
-    slackCodeExchange as unknown as typeof fetch
-  );
-
-  try {
-    await expect(
-      subject.completeSlackOAuthCallback(deps, {
-        code: 'code',
-        state: 'state',
-        userId: 'u_victim',
-      })
-    ).rejects.toThrow('started by another user');
-
-    projectAccessLevel = 'read';
-    await expect(
-      subject.completeSlackOAuthCallback(deps, {
-        code: 'code',
-        state: 'state',
-        userId: 'u_initiator',
-      })
-    ).rejects.toThrow();
-
-    expect(fetchSpy).not.toHaveBeenCalled();
-  } finally {
-    fetchSpy.mockRestore();
-  }
 });

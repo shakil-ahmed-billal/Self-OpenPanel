@@ -117,7 +117,7 @@ export function docsTools(ctx: Pick<ChatToolContext, 'config'>) {
   return {
     search_docs: tool({
       description:
-        'Search the OpenPanel documentation: SDK setup, tracking, identify users, groups, session replay, MCP, API, self-hosting, integrations, pricing concepts. Use it for any "how do I" or "is it possible" question about the product before answering from memory, and link the page you used.',
+        'Search the OpenPanel documentation: SDK setup, tracking, identify users, groups, MCP, API, self-hosting, integrations. Use it for any "how do I" or "is it possible" question about the product before answering from memory, and link the page you used.',
       inputSchema: z.object({ query: z.string().min(1) }),
       execute: async ({ query }) => {
         try {

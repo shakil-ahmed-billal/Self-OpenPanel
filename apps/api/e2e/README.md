@@ -4,7 +4,7 @@ Three harnesses over a shared foundation (`lib.ts`), all driving the **real stac
 over HTTP and asserting state in **both ClickHouse and Redis**:
 
 - `session-e2e.ts` (`e2e:sessions`) — **correctness**: the full lifecycle for one
-  session per scenario (open/extend/close via reaper + boundary, replay, identify),
+  session per scenario (open/extend/close via reaper + boundary, identify),
   including Redis cleanup.
 - `session-stress.ts` (`e2e:sessions:stress`) — **volume + drain**: ramps out many
   sessions, then drives reaper + buffer flushes until *everything* has drained
@@ -26,7 +26,6 @@ over HTTP and asserting state in **both ClickHouse and Redis**:
 |----------|---------|
 | Single session → reaper close | session blob + wallclock + projects-set in Redis; one `session_start` + N events in CH; after the reaper closes it: one `session_end`, a collapsed `sessions` row, and Redis fully cleaned (blob + wallclock gone, idempotency claim present). |
 | Boundary split | a >idle-window gap opens a NEW session id and emits a `session_end` for the first + a `session_start` for the second. |
-| Replay | a replay chunk lands in `session_replay_chunks` under the echoed session id. |
 | Identify | `session:profile:{pid}:{profileId}` pointer written; events carry the identified `profile_id`. |
 
 ## Running

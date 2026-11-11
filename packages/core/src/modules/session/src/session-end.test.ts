@@ -46,15 +46,7 @@ function makeDeps(live = snapshot as ReturnType<typeof fixtureSession> | null) {
     logger: stubLogger(),
     config: testCoreConfig(),
     createEvent,
-    transformEvent: (event) => event as never,
-    transformSessionToEvent: () => ({}) as never,
-    getEvents: mock(async () => []),
     profileBackfill: { add: mock(async () => undefined) },
-    notifications: {
-      getRules: mock(async () => []),
-      hasFunnelRules: () => false,
-      checkFunnelRules: mock(async () => undefined),
-    },
   };
   return { deps, redis, sessions, createEvent };
 }

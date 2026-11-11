@@ -21,7 +21,6 @@ const isDuplicateIngestRequest = mock(async () => true);
 const ingestTrack = mock(async () => ({ status: 'ok' as const, ...IDENTITY }));
 const ingestLegacyEvent = mock(async () => ({ status: 'ok' as const }));
 const checkIngestBot = mock(async () => undefined);
-const isIngestionWoundDown = mock(async () => false);
 
 mock.module('../../http/client-auth', () => ({ authenticateClient }));
 
@@ -32,7 +31,6 @@ mock.module('./ingest.service', () => ({
   ingestTrack,
   ingestLegacyEvent,
   checkIngestBot,
-  isIngestionWoundDown,
 }));
 
 let ingestRoutes: typeof import('./ingest.routes').ingestRoutes;
@@ -48,7 +46,6 @@ beforeEach(() => {
   ingestTrack.mockClear();
   ingestLegacyEvent.mockClear();
   checkIngestBot.mockClear();
-  isIngestionWoundDown.mockClear();
 });
 
 function post(path: string) {
@@ -74,7 +71,6 @@ for (const path of ['/track', '/event']) {
     expect(ingestTrack).not.toHaveBeenCalled();
     expect(ingestLegacyEvent).not.toHaveBeenCalled();
     expect(checkIngestBot).not.toHaveBeenCalled();
-    expect(isIngestionWoundDown).not.toHaveBeenCalled();
   });
 }
 
@@ -90,5 +86,4 @@ test('a non-duplicate track still returns device and session identity', async ()
   expect(ingestTrack).toHaveBeenCalledTimes(1);
   expect(ingestLegacyEvent).not.toHaveBeenCalled();
   expect(checkIngestBot).toHaveBeenCalledTimes(1);
-  expect(isIngestionWoundDown).toHaveBeenCalledTimes(1);
 });

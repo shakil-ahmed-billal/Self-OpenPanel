@@ -1,5 +1,5 @@
-// The seven BullMQ queues, statically composed: static composition is what
-// keeps `QueueProducers` typed. Registry key === Redis name for all seven
+// The five BullMQ queues, statically composed: static composition is what
+// keeps `QueueProducers` typed. Registry key === Redis name for all five
 // (`cohortCompute` included), so `COHORTCOMPUTE_CONCURRENCY` keeps working;
 // `queueKey` decides what actually reaches Redis.
 
@@ -11,20 +11,15 @@ import {
   type SchedulerDefinition,
   schedulersFromRegistry,
 } from './jobs/schedulers';
-import { aiCronJobs } from './modules/ai/ai.jobs';
 import { cohortCronJobs, cohortQueueJobs } from './modules/cohort/cohort.jobs';
 import { eventCronJobs } from './modules/event/event.jobs';
 import { groupCronJobs } from './modules/group/group.jobs';
 import { gscCronJobs, gscQueueJobs } from './modules/gsc/gsc.jobs';
-import { importQueueJobs } from './modules/import/import.jobs';
 import {
   insightCronJobs,
   insightQueueJobs,
 } from './modules/insight/insight.jobs';
-import { integrationCronJobs } from './modules/integration/integration.jobs';
 import { miscCronJobs } from './modules/misc/misc.jobs';
-import { notificationQueueJobs } from './modules/notification/notification.jobs';
-import { onboardingCronJobs } from './modules/onboarding/onboarding.jobs';
 import { organizationCronJobs } from './modules/organization/organization.jobs';
 import { profileCronJobs } from './modules/profile/profile.jobs';
 import { saltCronJobs } from './modules/salt/salt.jobs';
@@ -42,8 +37,6 @@ const COHORT_ATTEMPTS = 3;
 const CONCURRENCY = {
   sessions: 1,
   cron: 4,
-  notification: 1,
-  import: 1,
   insights: 5,
   gsc: 5,
   cohortCompute: 2,
@@ -79,36 +72,12 @@ const cron = defineQueue('cron', {
     ...eventCronJobs,
     ...profileCronJobs,
     ...groupCronJobs,
-    ...aiCronJobs,
     ...insightCronJobs,
     ...gscCronJobs,
     ...cohortCronJobs,
     ...organizationCronJobs,
-    ...onboardingCronJobs,
     ...sessionCronJobs,
     ...miscCronJobs,
-    ...integrationCronJobs,
-  },
-});
-
-const notification = defineQueue('notification', {
-  defaults: {
-    removeOnComplete: 10,
-    removeOnFail: { age: DAY_IN_SECONDS, count: 100 },
-  },
-  worker: { concurrency: CONCURRENCY.notification },
-  compat: legacyCompat.notification,
-  jobs: {
-    ...notificationQueueJobs,
-  },
-});
-
-const importQueue = defineQueue('import', {
-  defaults: { removeOnComplete: 10, removeOnFail: 50 },
-  worker: { concurrency: CONCURRENCY.import },
-  compat: legacyCompat.import,
-  jobs: {
-    ...importQueueJobs,
   },
 });
 
@@ -150,8 +119,6 @@ const cohortCompute = defineQueue('cohortCompute', {
 export const queues = {
   sessions,
   cron,
-  notification,
-  import: importQueue,
   insights,
   gsc,
   cohortCompute,
@@ -164,7 +131,7 @@ export type Queues = typeof queues;
 export const CRON_SCHEDULES: readonly SchedulerDefinition[] =
   schedulersFromRegistry(cron);
 
-/** What `ctx.queues` is: `ctx.queues.import.run.add({ importId })`. */
+/** What `ctx.queues` is: e.g. `ctx.queues.insights.insightsProject.add(...)`. */
 export type QueueProducers = Producers<Queues>;
 
 /** What `AppDeps.producers` is: built once at boot, scoped per unit of work. */

@@ -3,12 +3,10 @@ import AddClient from './add-client';
 import AddCohort from './add-cohort';
 import AddDashboard from './add-dashboard';
 import AddGroup from './add-group';
-import AddImport from './add-import';
 import AddIntegration from './add-integration';
 import AddNotificationRule from './add-notification-rule';
 import AddProject from './add-project';
 import AddReference from './add-reference';
-import BillingSuccess from './billing-success';
 import type { ConfirmProps } from './confirm';
 import Confirm from './confirm';
 import ConfirmDeleteAccount from './confirm-delete-account';
@@ -34,7 +32,6 @@ import PageDetails from './page-details';
 import RegenerateRecoveryCodes from './regenerate-recovery-codes';
 import RequestPasswordReset from './request-reset-password';
 import SaveReport from './save-report';
-import SelectBillingPlan from './select-billing-plan';
 import SetupTwoFactor from './setup-two-factor';
 import ShareDashboardModal from './share-dashboard-modal';
 import ShareOverviewModal from './share-overview-modal';
@@ -61,7 +58,6 @@ const modals = {
   EditClient,
   AddProject,
   AddClient,
-  AddImport,
   Confirm,
   ConfirmDeleteAccount,
   ConfirmDeleteOrganization,
@@ -84,8 +80,6 @@ const modals = {
   OverviewFilters,
   TableFilters,
   CreateInvite,
-  SelectBillingPlan,
-  BillingSuccess,
   SetupTwoFactor,
   DisableTwoFactor,
   RegenerateRecoveryCodes,

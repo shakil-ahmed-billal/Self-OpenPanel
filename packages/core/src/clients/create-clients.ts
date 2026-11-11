@@ -6,7 +6,6 @@
 
 import { sendEmail } from './email';
 import { getAsnInfo, getGeoLocation } from './geo';
-import { sendDiscordNotification } from './integrations/discord';
 
 export interface ServiceClients {
   geo: {
@@ -16,15 +15,11 @@ export interface ServiceClients {
   email: {
     sendEmail: typeof sendEmail;
   };
-  discord: {
-    sendDiscordNotification: typeof sendDiscordNotification;
-  };
 }
 
 export function createClients(): ServiceClients {
   return {
     geo: { getGeoLocation, getAsnInfo },
     email: { sendEmail },
-    discord: { sendDiscordNotification },
   };
 }

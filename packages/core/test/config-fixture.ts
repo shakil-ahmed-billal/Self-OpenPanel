@@ -57,18 +57,6 @@ export function testCoreConfig(
         version: undefined,
       },
     },
-    selfTracking: {
-      clientId: undefined,
-      clientSecret: undefined,
-      apiUrl: undefined,
-    },
-    slack: {
-      clientId: undefined,
-      clientSecret: undefined,
-      oauthRedirectUrl: undefined,
-      stateSecret: undefined,
-    },
-    polar: { saveDiscountId: undefined, webhookSecret: undefined },
     kafka: {
       clientId: 'openpanel',
       brokers: [],
@@ -113,7 +101,6 @@ export function testCoreConfig(
         microBatchMs: undefined,
         microBatchSize: undefined,
       },
-      aiEvent: { batchSize: undefined, chunkSize: undefined },
       group: {
         batchSize: undefined,
         chunkSize: undefined,
@@ -126,7 +113,6 @@ export function testCoreConfig(
         fetchChunkSize: undefined,
       },
       profileBackfill: { batchSize: undefined },
-      replay: { batchSize: undefined, chunkSize: undefined },
       session: {
         batchSize: undefined,
         chunkSize: undefined,
@@ -151,16 +137,7 @@ export function testCoreConfig(
       cohortQuerySpillBytes: undefined,
       eventListMaxLookbackDays: undefined,
       sessionListMaxLookbackDays: undefined,
-      importBatchSize: undefined,
       insightsRetentionDays: undefined,
-      windDownMaxPerRun: undefined,
-    },
-    objectStoreExport: {
-      lagSeconds: undefined,
-      batchSize: undefined,
-      maxBatchesPerRun: undefined,
-      concurrency: undefined,
-      gcsApiEndpoint: undefined,
     },
     ipHeaders: { attributionOrder: undefined, trustedOrder: undefined },
     ...overrides,

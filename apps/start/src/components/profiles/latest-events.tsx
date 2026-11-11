@@ -1,4 +1,3 @@
-import { AI_INTERNAL_EVENT_NAMES } from '@openpanel/core/modules/ai/ai.constants';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { ActivityIcon } from 'lucide-react';
@@ -13,6 +12,8 @@ import { ScrollArea } from '../ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Widget } from '@/components/widget';
 import { useTRPC } from '@/integrations/trpc/react';
+
+const AI_INTERNAL_EVENT_NAMES = ['ai_trace', 'ai_span', 'ai_embedding'] as const;
 
 interface Props {
   profileId: string;

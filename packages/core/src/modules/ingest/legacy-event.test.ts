@@ -85,7 +85,6 @@ const buffers = {
     getExistingSessions: async (_projectId: string, deviceIds: string[]) =>
       deviceIds.map(() => null),
   },
-  replay: {},
   group: {},
 } as unknown as Buffers;
 

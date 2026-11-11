@@ -15,7 +15,6 @@ import {
   getActiveVisitorCount,
   subscribeToOrganizationSubscriptionUpdates,
   subscribeToProjectEventBatches,
-  subscribeToProjectNotifications,
   subscribeToVisitorActivity,
 } from './realtime.service';
 
@@ -154,46 +153,6 @@ export const realtimeRoutes = defineRoutes((app) =>
           await subscribeToProjectEventBatches(projectId, (event) => {
             ws.send(setSuperJson({ count: event.count }));
           })
-        );
-      },
-      close(ws) {
-        forgetUnsubscribe(ws);
-      },
-    })
-    .ws('/live/notifications/:projectId', {
-      params: projectParams,
-      async open(ws) {
-        const { projectId } = ws.data.params;
-        const userId = (await ws.data.ctx.session())?.userId;
-        if (!userId) {
-          rejectNoSession(ws);
-          return;
-        }
-
-        const access = await ws.data.ctx.services.auth.getProjectAccess({
-          userId,
-          projectId,
-        });
-        if (!access) {
-          rejectNoAccess(ws);
-          return;
-        }
-
-        // Re-proved per delivery: notifications are rare, and a member removed
-        // from the project must stop receiving them on a socket opened before.
-        rememberUnsubscribe(
-          ws,
-          await subscribeToProjectNotifications(
-            projectId,
-            async (notification) => {
-              const ctx = ws.data.ctx;
-              if (!(await hasMemberProjectAccess(ctx, userId, projectId))) {
-                rejectNoAccess(ws);
-                return;
-              }
-              ws.send(setSuperJson(notification));
-            }
-          )
         );
       },
       close(ws) {

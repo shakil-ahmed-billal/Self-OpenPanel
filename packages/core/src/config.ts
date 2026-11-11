@@ -83,28 +83,6 @@ export interface AiConfig {
   anthropic: AnthropicConfig;
 }
 
-/**
- * OP_CLIENT_ID / OP_CLIENT_SECRET / OP_API_URL: the OpenPanel project this
- * deployment reports its own AI calls to. Unset means no self-tracking.
- */
-export interface SelfTrackingConfig {
-  clientId: string | undefined;
-  clientSecret: string | undefined;
-  apiUrl: string | undefined;
-}
-
-export interface SlackConfig {
-  clientId: string | undefined;
-  clientSecret: string | undefined;
-  oauthRedirectUrl: string | undefined;
-  stateSecret: string | undefined;
-}
-
-export interface PolarConfig {
-  saveDiscountId: string | undefined;
-  webhookSecret: string | undefined;
-}
-
 export const KAFKA_SASL_MECHANISMS = [
   'plain',
   'scram-sha-256',
@@ -187,10 +165,8 @@ export interface BuffersConfig {
     microBatchSize: number | undefined;
   };
   group: BufferSizing;
-  aiEvent: BufferSizing;
   profile: BufferSizing;
   profileBackfill: BufferSizing;
-  replay: BufferSizing;
   session: BufferSizing & { squash: boolean };
 }
 
@@ -219,18 +195,7 @@ export interface QueryConfig {
   cohortQuerySpillBytes: number | undefined;
   eventListMaxLookbackDays: number | undefined;
   sessionListMaxLookbackDays: number | undefined;
-  importBatchSize: number | undefined;
   insightsRetentionDays: number | undefined;
-  windDownMaxPerRun: number | undefined;
-}
-
-export interface ObjectStoreExportConfig {
-  lagSeconds: number | undefined;
-  batchSize: number | undefined;
-  maxBatchesPerRun: number | undefined;
-  concurrency: number | undefined;
-  /** GCS_API_ENDPOINT: a non-default endpoint (an emulator, or a test double). */
-  gcsApiEndpoint: string | undefined;
 }
 
 /** Comma-separated header orders; `undefined` keeps the shipped order. */
@@ -266,13 +231,9 @@ export interface CoreConfig {
   auth: AuthConfig;
   cookies: CookieConfig;
   ai: AiConfig;
-  selfTracking: SelfTrackingConfig;
-  slack: SlackConfig;
-  polar: PolarConfig;
   kafka: KafkaConfig;
   buffers: BuffersConfig;
   session: SessionConfig;
   query: QueryConfig;
-  objectStoreExport: ObjectStoreExportConfig;
   ipHeaders: IpHeaderConfig;
 }

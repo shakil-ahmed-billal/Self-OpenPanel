@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import type { Logger } from '../../../logger';
 import {
   CHAT_BURST_LIMIT,
@@ -12,77 +12,11 @@ import {
 } from './limits';
 
 const NOW = new Date('2026-10-20T10:00:00Z');
-const FUTURE = new Date('2036-01-01T00:00:00Z');
-const PAST = new Date('2020-01-01T00:00:00Z');
-
-function organization(
-  overrides: Partial<Parameters<typeof resolveChatTier>[0]> = {}
-) {
-  return {
-    subscriptionStatus: 'active',
-    subscriptionCanceledAt: null,
-    subscriptionEndsAt: FUTURE,
-    subscriptionPauseAtPeriodEnd: false,
-    subscriptionPeriodEventsLimit: 10_000,
-    ...overrides,
-  };
-}
 
 describe('resolveChatTier', () => {
-  // The test preload pins SELF_HOSTED=true; the Cloud bands need it off.
-  let selfHostedEnv: string | undefined;
-  beforeAll(() => {
-    selfHostedEnv = process.env.SELF_HOSTED;
-    process.env.SELF_HOSTED = 'false';
-  });
-  afterAll(() => {
-    process.env.SELF_HOSTED = selfHostedEnv;
-  });
-
-  test('self-hosted installs are unlimited whatever the billing rows say', () => {
-    expect(
-      resolveChatTier(organization({ subscriptionStatus: null }), true)
-    ).toBe('unlimited');
-  });
-
-  test('trials and blocked billing states', () => {
-    expect(
-      resolveChatTier(organization({ subscriptionStatus: 'trialing' }), false)
-    ).toBe('trial');
-    expect(
-      resolveChatTier(
-        organization({ subscriptionStatus: null, subscriptionEndsAt: PAST }),
-        false
-      )
-    ).toBe('blocked');
-    expect(
-      resolveChatTier(organization({ subscriptionStatus: 'canceled' }), false)
-    ).toBe('blocked');
-    expect(
-      resolveChatTier(organization({ subscriptionStatus: 'past_due' }), false)
-    ).toBe('starter');
-  });
-
-  test('paid plans band by their event limit', () => {
-    expect(resolveChatTier(organization(), false)).toBe('starter');
-    expect(
-      resolveChatTier(
-        organization({ subscriptionPeriodEventsLimit: 100_000 }),
-        false
-      )
-    ).toBe('starter');
-    expect(
-      resolveChatTier(
-        organization({ subscriptionPeriodEventsLimit: 250_000 }),
-        false
-      )
-    ).toBe('growth');
-    expect(
-      resolveChatTier(
-        organization({ subscriptionPeriodEventsLimit: 5_000_000 }),
-        false
-      )
-    ).toBe('scale');
+  test('always returns unlimited when billing is disabled', () => {
+    expect(resolveChatTier({}, false)).toBe('unlimited');
+    expect(resolveChatTier({}, true)).toBe('unlimited');
   });
 });
 

@@ -1,7 +1,7 @@
 // `getSessionsCountCached` is `cacheablePerDeps`: `cacheable` keys on the call's
 // arguments, so deps travel beside the key or the Redis key would change per request.
 
-import { getSafeJson, resolveDateRange } from '@openpanel/shared';
+import { resolveDateRange } from '@openpanel/shared';
 import { cacheablePerDeps } from '../../cacheable-per-deps';
 import { chQuery } from '../../ch-query';
 import type { ServiceDeps, Services } from '../../services';
@@ -23,9 +23,7 @@ import {
   type SessionDistinctField,
   sessionByIdQuery,
   sessionDistinctValuesQuery,
-  sessionHasReplayQuery,
   sessionListQuery,
-  sessionReplayChunksQuery,
   sessionsCountQuery,
 } from './src/sql';
 
@@ -72,8 +70,6 @@ export interface IClickhouseSession {
   revenue: number;
   sign: 1 | -1;
   version: number;
-  // Dynamically added
-  has_replay?: boolean;
   groups: string[];
 }
 
@@ -114,7 +110,6 @@ export interface IServiceSession {
   utmTerm: string;
   revenue: number;
   profile?: IServiceProfile;
-  hasReplay?: boolean;
   groups: string[];
 }
 
@@ -141,7 +136,6 @@ const DEFAULT_LOOKBACK_DAYS = 0.5;
 const SESSION_LIST_MAX_LOOKBACK_DAYS_DEFAULT = 365;
 
 const SESSIONS_COUNT_CACHE_SECONDS = 60 * 10;
-const REPLAY_CHUNKS_PAGE_SIZE = 40;
 const DISTINCT_VALUES_DEFAULT_LIMIT = 200;
 const QUERY_SESSIONS_DEFAULT_LIMIT = 20;
 
@@ -192,7 +186,6 @@ export function transformSession(session: IClickhouseSession): IServiceSession {
     utmTerm: session.utm_term,
     revenue: session.revenue,
     profile: undefined,
-    hasReplay: session.has_replay,
     groups: session.groups,
   };
 }
@@ -250,7 +243,7 @@ export async function getSessionList(
     SESSION_LIST_MAX_LOOKBACK_DAYS_DEFAULT;
   const lookbackDays = Math.min(dateIntervalInDays, maxLookbackDays);
 
-  const data = await chQuery<IClickhouseSession & { hasReplay: boolean }>(
+  const data = await chQuery<IClickhouseSession>(
     deps,
     sessionListQuery({
       projectId,
@@ -337,50 +330,6 @@ export const getSessionsCountCached = cacheablePerDeps(
   SESSIONS_COUNT_CACHE_SECONDS
 );
 
-export interface ISessionReplayChunkMeta {
-  chunk_index: number;
-  started_at: string;
-  ended_at: string;
-  events_count: number;
-  is_full_snapshot: boolean;
-}
-
-export async function getSessionReplayChunksFrom(
-  deps: ServiceDeps,
-  sessionId: string,
-  projectId: string,
-  fromIndex: number
-) {
-  const rows = await chQuery<{ chunk_index: number; payload: string }>(
-    deps,
-    sessionReplayChunksQuery({
-      sessionId,
-      projectId,
-      limit: REPLAY_CHUNKS_PAGE_SIZE + 1,
-      offset: fromIndex,
-    })
-  );
-
-  const page = rows.slice(0, REPLAY_CHUNKS_PAGE_SIZE);
-  // `nextIndex` counts every row read, so an unparseable chunk is skipped rather
-  // than refetched.
-  return {
-    data: page
-      .map((row, index) => {
-        const events = getSafeJson<
-          { type: number; data: unknown; timestamp: number }[]
-        >(row.payload);
-        if (!events) {
-          return null;
-        }
-        return { chunkIndex: index + fromIndex, events };
-      })
-      .filter(Boolean),
-    nextIndex: fromIndex + page.length,
-    hasMore: rows.length > REPLAY_CHUNKS_PAGE_SIZE,
-  };
-}
-
 export async function getSessionDistinctValues(
   deps: ServiceDeps,
   projectId: string,
@@ -399,26 +348,17 @@ export async function getSessionById(
   sessionId: string,
   projectId: string
 ) {
-  const [sessionRows, hasReplayRows] = await Promise.all([
-    chQuery<IClickhouseSession>(
-      deps,
-      sessionByIdQuery({ sessionId, projectId }),
-      CLIX_SESSION_TIMEZONE
-    ),
-    chQuery<{ n: number }>(
-      deps,
-      sessionHasReplayQuery({ sessionId, projectId })
-    ),
-  ]);
+  const sessionRows = await chQuery<IClickhouseSession>(
+    deps,
+    sessionByIdQuery({ sessionId, projectId }),
+    CLIX_SESSION_TIMEZONE
+  );
 
   if (!sessionRows[0]) {
     throw new Error('Session not found');
   }
 
-  return {
-    ...transformSession(sessionRows[0]),
-    hasReplay: hasReplayRows.length > 0,
-  };
+  return transformSession(sessionRows[0]);
 }
 
 export interface QuerySessionsInput {

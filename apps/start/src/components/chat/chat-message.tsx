@@ -4,14 +4,12 @@ import { ChevronRightIcon } from 'lucide-react';
 import { useState } from 'react';
 import { ChatMarkdown } from './chat-markdown';
 import { ApprovalCard, ApprovalDecided } from './parts/approval-card';
-import { BillingCard, type BillingOutput } from './parts/billing-card';
 import { ChartCard } from './parts/chart-card';
 import { DiagnosisCard, type DiagnosisOutput } from './parts/diagnosis-card';
 import {
   DialogCard,
   DocsCard,
   NavigateCard,
-  PlanChangeCard,
   SearchCard,
 } from './parts/result-cards';
 import { TableCard } from './parts/table-card';
@@ -216,12 +214,6 @@ function ToolResult({
         session={hit.session ?? null}
       />
     );
-  }
-  if (toolName === 'change_plan') {
-    return <PlanChangeCard output={output as { checkoutUrl?: string }} />;
-  }
-  if (toolName === 'get_billing') {
-    return <BillingCard output={output as BillingOutput} />;
   }
   if (toolName === 'diagnose_tracking') {
     return <DiagnosisCard output={output as DiagnosisOutput} />;

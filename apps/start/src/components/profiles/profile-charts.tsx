@@ -1,10 +1,10 @@
-import { AI_INTERNAL_EVENT_NAMES } from '@openpanel/core/modules/ai/ai.constants';
 import type { IReport } from '@openpanel/core/modules/report/report.constants';
 import { memo } from 'react';
 import { WidgetHead } from '../overview/overview-widget';
 import { ReportChart } from '@/components/report-chart';
 import { Widget, WidgetBody } from '@/components/widget';
 
+const AI_INTERNAL_EVENT_NAMES = ['ai_trace', 'ai_span', 'ai_embedding'] as const;
 const CHART_OPTIONS = { hideTable: true };
 
 interface Props {

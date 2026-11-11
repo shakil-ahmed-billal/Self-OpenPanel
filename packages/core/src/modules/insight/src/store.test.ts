@@ -3,15 +3,12 @@ import { testCoreConfig } from '../../../../test/config-fixture';
 import type { ServiceDeps } from '../../../services';
 import { createInsightStore } from './store';
 
-test.each([
-  false,
-  true,
-])('daily candidates preserve activity filters with selfHosted=%s', async (selfHosted) => {
+test('daily candidates apply activity filters', async () => {
   const findMany = mock(async (_query: unknown) => [{ id: 'project' }]);
   const deps = {
     db: { project: { findMany } },
     prisma: { DbNull: null },
-    config: testCoreConfig({ selfHosted }),
+    config: testCoreConfig(),
   } as unknown as ServiceDeps;
 
   const result =
@@ -27,7 +24,6 @@ test.each([
     deleteAt: null,
     eventsCount: { gt: 10_000 },
     updatedAt: { gt: expect.any(Date) },
-    ...(selfHosted ? {} : { organization: { subscriptionStatus: 'active' } }),
   });
   expect(query.select).toEqual({ id: true });
 });

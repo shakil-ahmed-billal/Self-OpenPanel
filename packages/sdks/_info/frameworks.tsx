@@ -2,7 +2,6 @@ import type React from 'react';
 import { AstroIcon } from './icons/astro-icon';
 import { ExpressIcon } from './icons/express-icon';
 import { HtmlIcon } from './icons/html-icon';
-import { KotlinIcon } from './icons/kotlin-icon';
 import { LaravelIcon } from './icons/laravel-icon';
 import { NextjsIcon } from './icons/nextjs-icon';
 import { NodeIcon } from './icons/node-icon';
@@ -13,7 +12,6 @@ import { RemixIcon } from './icons/remix-icon';
 import { RestIcon } from './icons/rest-icon';
 import { RubyIcon } from './icons/ruby-icon';
 import { RustIcon } from './icons/rust-icon';
-import { SwiftIcon } from './icons/swift-icon';
 import { VueIcon } from './icons/vue-icon';
 
 export interface Framework {
@@ -82,13 +80,6 @@ export const frameworks: Framework[] = [
     type: ['backend', 'app', 'website'],
   },
   {
-    key: 'react-native',
-    IconComponent: ReactIcon,
-    name: 'React-Native',
-    href: 'https://openpanel.dev/docs/sdks/react-native',
-    type: ['app'],
-  },
-  {
     key: 'node',
     IconComponent: NodeIcon,
     name: 'Node',
@@ -129,19 +120,5 @@ export const frameworks: Framework[] = [
     name: 'Ruby',
     href: 'https://openpanel.dev/docs/sdks/ruby',
     type: ['backend'],
-  },
-  {
-    key: 'ios',
-    IconComponent: SwiftIcon,
-    name: 'iOS (swift)',
-    href: 'https://openpanel.dev/docs/sdks/swift',
-    type: ['app'],
-  },
-  {
-    key: 'android',
-    IconComponent: KotlinIcon,
-    name: 'Android (kotlin)',
-    href: 'https://openpanel.dev/docs/sdks/kotlin',
-    type: ['app'],
   },
 ];

@@ -1,13 +1,11 @@
 import type { ChatToolContext } from '../context';
 import { analyticsTools } from './analytics';
-import { billingTools } from './billing';
 import { chartTools } from './charts';
 import { clientTools } from './client-tools';
 import { dashboardTools } from './dashboards';
 import { discoveryTools } from './discovery';
 import { docsTools } from './docs';
 import { entityTools } from './entities';
-import { referenceTools } from './references';
 import { searchTools } from './search';
 import { seoTools } from './seo';
 import { trackingToolApproval, trackingTools } from './tracking';
@@ -20,10 +18,8 @@ export function createChatTools(ctx: ChatToolContext) {
     ...chartTools(ctx),
     ...searchTools(ctx),
     ...entityTools(ctx),
-    ...referenceTools(ctx),
     ...seoTools(ctx),
     ...trackingTools(ctx),
-    ...billingTools(ctx),
     ...dashboardTools(ctx),
     ...docsTools(ctx),
     ...clientTools(),
@@ -36,10 +32,8 @@ export type ChatTools = ReturnType<typeof createChatTools>;
 const CHAT_WRITE_APPROVAL = {
   create_dashboard: 'user-approval',
   save_chart: 'user-approval',
-  create_reference: 'user-approval',
   invite_member: 'user-approval',
   update_project: 'user-approval',
-  change_plan: 'user-approval',
 } as const satisfies Partial<Record<keyof ChatTools, 'user-approval'>>;
 
 export function createChatToolApproval(ctx: ChatToolContext) {

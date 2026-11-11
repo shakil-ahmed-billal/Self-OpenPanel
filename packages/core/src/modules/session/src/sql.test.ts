@@ -11,9 +11,7 @@ import {
   sessionByIdQuery,
   sessionDistinctValuesQuery,
   sessionEventsQuery,
-  sessionHasReplayQuery,
   sessionListQuery,
-  sessionReplayChunksQuery,
   sessionsCountQuery,
 } from './sql';
 
@@ -32,28 +30,24 @@ describe('sessionListQuery', () => {
     }).toStatement();
     const text = collapse(query);
 
-    expect(text).toContain(
-      "toBool(src.session_id != '') as hasReplay FROM sessions LEFT JOIN"
-    );
+    expect(text).toContain('SELECT created_at,');
+    expect(text).toContain('FROM sessions');
     expect(text).not.toContain('FINAL');
-    expect(text).toContain('started_at > now() - INTERVAL {p2:Float64} DAY');
     expect(text).toContain(
-      'WHERE project_id = {p3:String} AND created_at >= toDateTime64({p4:String}, 3) - INTERVAL {p5:Float64} DAY AND sign = 1 AND (id, version) GLOBAL NOT IN ( SELECT id, version FROM sessions WHERE project_id = {p6:String} AND created_at >= toDateTime64({p7:String}, 3) - INTERVAL {p8:Float64} DAY AND sign = -1 ) ORDER BY created_at DESC LIMIT {p9:UInt64}'
+      'WHERE project_id = {p1:String} AND created_at >= toDateTime64({p2:String}, 3) - INTERVAL {p3:Float64} DAY AND sign = 1 AND (id, version) GLOBAL NOT IN ( SELECT id, version FROM sessions WHERE project_id = {p4:String} AND created_at >= toDateTime64({p5:String}, 3) - INTERVAL {p6:Float64} DAY AND sign = -1 ) ORDER BY created_at DESC LIMIT {p7:UInt64}'
     );
     expect(text).not.toContain('created_at <');
     expect(text).not.toContain('profile_id =');
     expect(text).not.toContain('ILIKE');
     expect(query_params).toMatchObject({
       p1: PROJECT_ID,
-      p2: 0.5,
-      p3: PROJECT_ID,
-      p5: 0.5,
-      p6: PROJECT_ID,
-      p8: 0.5,
-      p9: 50,
+      p3: 0.5,
+      p4: PROJECT_ID,
+      p6: 0.5,
+      p7: 50,
     });
-    expect(query_params.p7).toBe(query_params.p4);
-    expect(query_params.p4).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+    expect(query_params.p5).toBe(query_params.p2);
+    expect(query_params.p2).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
   });
 
   test('cursor page: lookback anchored at the cursor plus the `created_at <` boundary, in both the page and the −1 subquery', () => {
@@ -67,12 +61,12 @@ describe('sessionListQuery', () => {
     const text = collapse(query);
 
     expect(text).toContain(
-      'AND created_at >= toDateTime64({p4:String}, 3) - INTERVAL {p5:Float64} DAY AND created_at < {p6:String} AND sign = 1'
+      'AND created_at >= toDateTime64({p2:String}, 3) - INTERVAL {p3:Float64} DAY AND created_at < {p4:String} AND sign = 1'
     );
     expect(text).toContain(
-      'WHERE project_id = {p7:String} AND created_at >= toDateTime64({p8:String}, 3) - INTERVAL {p9:Float64} DAY AND created_at < {p10:String} AND sign = -1 )'
+      'WHERE project_id = {p5:String} AND created_at >= toDateTime64({p6:String}, 3) - INTERVAL {p7:Float64} DAY AND created_at < {p8:String} AND sign = -1 )'
     );
-    for (const key of ['p4', 'p6', 'p8', 'p10']) {
+    for (const key of ['p2', 'p4', 'p6', 'p8']) {
       expect(query_params[key]).toBe('2026-07-10 12:34:56');
     }
   });
@@ -95,17 +89,17 @@ describe('sessionListQuery', () => {
 
     expect(text).not.toContain('toDateTime64');
     expect(text).toContain(
-      "AND toDate(created_at) BETWEEN toDate({p4:String}) AND toDate({p5:String}) AND sign = 1 AND (id, version) GLOBAL NOT IN ( SELECT id, version FROM sessions WHERE project_id = {p6:String} AND toDate(created_at) BETWEEN toDate({p7:String}) AND toDate({p8:String}) AND sign = -1 ) AND profile_id = {p9:String} AND (entry_path ILIKE {p10:String} OR exit_path ILIKE {p11:String} OR referrer ILIKE {p12:String} OR referrer_name ILIKE {p13:String}) AND country = 'SE' AND device = 'mobile' ORDER BY"
+      "AND toDate(created_at) BETWEEN toDate({p2:String}) AND toDate({p3:String}) AND sign = 1 AND (id, version) GLOBAL NOT IN ( SELECT id, version FROM sessions WHERE project_id = {p4:String} AND toDate(created_at) BETWEEN toDate({p5:String}) AND toDate({p6:String}) AND sign = -1 ) AND profile_id = {p7:String} AND (entry_path ILIKE {p8:String} OR exit_path ILIKE {p9:String} OR referrer ILIKE {p10:String} OR referrer_name ILIKE {p11:String}) AND country = 'SE' AND device = 'mobile' ORDER BY"
     );
     expect(query_params).toMatchObject({
-      p4: '2026-07-01 00:00:00',
-      p5: '2026-07-31 23:59:59',
-      p7: '2026-07-01 00:00:00',
-      p8: '2026-07-31 23:59:59',
-      p9: 'user-1',
-      p10: '%checkout%',
-      p13: '%checkout%',
-      p14: 10,
+      p2: '2026-07-01 00:00:00',
+      p3: '2026-07-31 23:59:59',
+      p5: '2026-07-01 00:00:00',
+      p6: '2026-07-31 23:59:59',
+      p7: 'user-1',
+      p8: '%checkout%',
+      p11: '%checkout%',
+      p12: 10,
     });
   });
 
@@ -137,41 +131,14 @@ describe('sessionsCountQuery', () => {
   });
 });
 
-describe('replay and byId', () => {
-  test('sessionReplayChunksQuery binds page bounds as UInt64', () => {
-    const { query, query_params } = sessionReplayChunksQuery({
-      sessionId: 'sess-1',
-      projectId: PROJECT_ID,
-      limit: 41,
-      offset: 80,
-    }).toStatement();
-
-    expect(collapse(query)).toBe(
-      'SELECT chunk_index, payload FROM session_replay_chunks WHERE session_id = {p1:String} AND project_id = {p2:String} ORDER BY started_at, ended_at, chunk_index LIMIT {p3:UInt64} OFFSET {p4:UInt64}'
-    );
-    expect(query_params).toEqual({
-      p1: 'sess-1',
-      p2: PROJECT_ID,
-      p3: 41,
-      p4: 80,
-    });
-  });
-
-  test('sessionByIdQuery prewheres the id and keeps sign under FINAL; sessionHasReplayQuery text is pinned', () => {
+describe('byId', () => {
+  test('sessionByIdQuery prewheres the id and keeps sign under FINAL', () => {
     const byId = sessionByIdQuery({
       sessionId: 'sess-1',
       projectId: PROJECT_ID,
     }).toStatement();
     expect(collapse(byId.query)).toBe(
       'SELECT * FROM sessions FINAL PREWHERE id = {p1:String} AND project_id = {p2:String} WHERE sign = 1'
-    );
-
-    const hasReplay = sessionHasReplayQuery({
-      sessionId: 'sess-1',
-      projectId: PROJECT_ID,
-    }).toStatement();
-    expect(collapse(hasReplay.query)).toBe(
-      'SELECT 1 AS n FROM session_replay_chunks WHERE session_id = {p1:String} AND project_id = {p2:String} LIMIT 1'
     );
   });
 });

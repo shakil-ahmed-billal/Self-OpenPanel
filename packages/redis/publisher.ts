@@ -1,4 +1,3 @@
-import type { Prisma } from '@openpanel/db';
 import { getSuperJson, setSuperJson } from '@openpanel/shared';
 import { getRedisPub, getRedisSub, type Redis } from './redis';
 
@@ -10,9 +9,6 @@ export type IPublishChannels = {
   };
   events: {
     batch: { projectId: string; count: number };
-  };
-  notification: {
-    created: Prisma.NotificationUncheckedCreateInput;
   };
   ops: {
     garbage_collect: { requestedAt: string };

@@ -128,24 +128,6 @@ test('subscribeToProjectEventBatches hands the whole batch through, filtered by 
   expect(onBatch).toHaveBeenCalledWith({ projectId: 'proj_1', count: 3 });
 });
 
-test('subscribeToProjectNotifications subscribes on notification:created and filters by projectId', async () => {
-  const onNotification = mock((_notification: unknown) => undefined);
-  await subject.subscribeToProjectNotifications('proj_1', onNotification);
-
-  const [channel, type, callback] = subscribeToPublishedEvent.mock.calls[0]!;
-  expect(channel).toBe('notification');
-  expect(type).toBe('created');
-
-  (callback as (event: unknown) => void)({
-    projectId: 'proj_other',
-    title: 't',
-  });
-  expect(onNotification).not.toHaveBeenCalled();
-
-  (callback as (event: unknown) => void)({ projectId: 'proj_1', title: 't' });
-  expect(onNotification).toHaveBeenCalledTimes(1);
-});
-
 // The `organization:subscription_updated` channel is instance-wide.
 // Unfiltered, a subscriber saw the `organizationId` of every organization whose
 // subscription changed — including ones it is not a member of. This test is red

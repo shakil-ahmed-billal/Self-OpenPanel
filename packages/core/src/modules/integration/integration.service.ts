@@ -2,13 +2,12 @@
 // EXISTING row's scope, not the attacker-controlled input, so the access
 // assertions live here with the business logic.
 
-import { z } from 'zod';
 import { TRPCBadRequestError, TRPCForbiddenError } from '../../rpc/errors';
 import type { ServiceDeps, Services } from '../../services';
 import { getOrganizationAccess } from '../../shared/access-lookups';
 import { getAccessChecks } from '../auth/auth.service';
 import { BASE_INTEGRATIONS } from '../notification/notification.service';
-import type { IIntegrationConfig, ISlackConfig } from './integration.constants';
+import type { IIntegrationConfig } from './integration.constants';
 import {
   carryOverConfigSecrets,
   encryptConfigSecrets,
@@ -17,13 +16,6 @@ import {
   getServerIntegration,
   redactIntegration,
 } from './src/registry';
-import { safeWebhookFetcher } from './src/safe-fetcher';
-import {
-  getSlackInstallUrl,
-  sendSlackNotification,
-  slackInstaller,
-} from './src/slack';
-import { zSlackAuthResponse } from './src/slack-contract';
 
 // A client never legitimately holds a ciphertext (see redactIntegration), so
 // one arriving on the wire is an attempt to replay a secret lifted from another
@@ -231,80 +223,6 @@ export async function upsertIntegration(
   return redactIntegration(row);
 }
 
-export async function createOrUpdateSlackIntegration(
-  deps: ServiceDeps,
-  userId: string,
-  input: { id?: string; name: string; projectId: string }
-) {
-  // For an update, authorize against the existing integration's scope so a
-  // user can't clear/re-install another project's Slack integration.
-  let organizationId: string;
-  // Carried into the OAuth metadata and the post-callback redirect, so it
-  // has to be the row's own project — not whatever `input` asked for, which
-  // on an update is unauthorized and may point at a different project.
-  let projectId: string;
-
-  const db = deps.db;
-
-  if (input.id) {
-    const existing = await db.integration.findUniqueOrThrow({
-      where: { id: input.id },
-      select: { projectId: true, organizationId: true },
-    });
-    await assertIntegrationAccess(userId, existing, 'write');
-    organizationId = existing.organizationId;
-    projectId = existing.projectId ?? input.projectId;
-  } else {
-    organizationId = await assertProjectAccessAndGetOrg(
-      deps,
-      userId,
-      input.projectId,
-      'write'
-    );
-    projectId = input.projectId;
-  }
-
-  const res = input.id
-    ? await db.integration.update({
-        where: {
-          id: input.id,
-          organizationId,
-        },
-        data: {
-          name: input.name,
-          // This is empty and will be filled by the webhook
-          config: {} as ISlackConfig,
-        },
-      })
-    : await db.integration.create({
-        data: {
-          name: input.name,
-          organizationId,
-          projectId: input.projectId,
-          // This is empty and will be filled by the webhook
-          config: {} as ISlackConfig,
-        },
-      });
-
-  // `getSlackInstallUrl` returns null when no Slack app is configured on this
-  // deployment. The decision that a Slack integration is unusable without one
-  // is this service's, not the transport's.
-  const installUrl = await getSlackInstallUrl({
-    config: deps.config,
-    integrationId: res.id,
-    organizationId,
-    projectId,
-    userId,
-  });
-  if (!installUrl) {
-    throw new TRPCBadRequestError(
-      'Slack is not configured on this OpenPanel deployment'
-    );
-  }
-
-  return { ...res, slackInstallUrl: installUrl };
-}
-
 // Generic, registry-driven connection test. Gated on project write access:
 // it makes the server connect outbound to a caller-supplied destination with
 // caller-supplied credentials, so it must not be reachable by anyone who
@@ -330,28 +248,6 @@ export async function testIntegrationConnection(
   );
 }
 
-// Back-compat alias for the export forms; same gate as `testIntegrationConnection`.
-export async function testExportIntegrationConnection(
-  deps: ServiceDeps,
-  userId: string,
-  input: { projectId: string; config: IIntegrationConfig }
-) {
-  const { requireProjectAccess } = await getAccessChecks();
-  await requireProjectAccess({
-    userId,
-    projectId: input.projectId,
-    level: 'write',
-  });
-  rejectEncryptedSecrets(input.config);
-
-  return (
-    (await getServerIntegration(input.config.type).testConnection?.(
-      input.config,
-      deps.config
-    )) ?? { success: false, error: 'Unknown export type' }
-  );
-}
-
 export async function deleteIntegration(
   deps: ServiceDeps,
   userId: string,
@@ -373,99 +269,6 @@ export async function deleteIntegration(
   return { id };
 }
 
-const slackOAuthMetadataSchema = z.object({
-  organizationId: z.string(),
-  integrationId: z.string(),
-  // Optional for back-compat with install URLs generated before integrations
-  // became project-scoped; the post-install redirect falls back to the org page.
-  projectId: z.string().optional(),
-  // The signed state proves the install URL is ours, not that the browser
-  // completing it belongs to whoever generated it.
-  userId: z.string(),
-});
-
-export class SlackOAuthCallbackError extends Error {}
-
-export interface CompleteSlackOAuthCallbackResult {
-  organizationId: string;
-  projectId?: string;
-}
-
-export async function completeSlackOAuthCallback(
-  deps: ServiceDeps,
-  params: {
-    code: string;
-    state: string;
-    userId: string;
-  }
-): Promise<CompleteSlackOAuthCallbackResult> {
-  const verifiedState = await slackInstaller(
-    deps.config
-  ).stateStore?.verifyStateParam(new Date(), params.state);
-  const parsedMetadata = slackOAuthMetadataSchema.safeParse(
-    JSON.parse(verifiedState?.metadata ?? '{}')
-  );
-
-  if (!parsedMetadata.success) {
-    throw new SlackOAuthCallbackError('Invalid metadata');
-  }
-
-  const { organizationId, integrationId, projectId, userId } =
-    parsedMetadata.data;
-
-  if (userId !== params.userId) {
-    throw new SlackOAuthCallbackError(
-      'This Slack installation was started by another user'
-    );
-  }
-
-  const db = deps.db;
-  const integration = await db.integration.findUniqueOrThrow({
-    where: { id: integrationId },
-    select: { projectId: true, organizationId: true },
-  });
-  await assertIntegrationAccess(params.userId, integration, 'write');
-
-  const slack = deps.config.slack;
-  const slackOauthAccessUrl = [
-    'https://slack.com/api/oauth.v2.access',
-    `?client_id=${slack.clientId}`,
-    `&client_secret=${slack.clientSecret}`,
-    `&code=${params.code}`,
-    `&redirect_uri=${slack.oauthRedirectUrl}`,
-  ].join('');
-
-  const response = await fetch(slackOauthAccessUrl);
-  const json = await response.json();
-  const parsedJson = zSlackAuthResponse.safeParse(json);
-
-  if (!parsedJson.success) {
-    throw new SlackOAuthCallbackError('Failed to parse slack auth response');
-  }
-
-  await sendSlackNotification({
-    fetcher: safeWebhookFetcher,
-    webhookUrl: parsedJson.data.incoming_webhook.url,
-    message:
-      '👋 Hello. You have successfully connected OpenPanel.dev to your Slack workspace.',
-  });
-
-  await db.integration.update({
-    where: {
-      id: integrationId,
-      organizationId,
-    },
-    data: {
-      config: {
-        type: 'slack',
-        ...parsedJson.data,
-      },
-    },
-  });
-
-  return { organizationId, projectId };
-}
-
 /** A module function's signature with its leading `ServiceDeps` dropped. */
 type WithoutDeps<T extends (deps: ServiceDeps, ...args: never[]) => unknown> =
   T extends (deps: ServiceDeps, ...args: infer A) => infer R
@@ -483,29 +286,17 @@ export function createIntegrationService(
   ) => listIntegrationsForProject(deps, ...args);
   const upsert: WithoutDeps<typeof upsertIntegration> = (...args) =>
     upsertIntegration(deps, ...args);
-  const createOrUpdateSlack: WithoutDeps<
-    typeof createOrUpdateSlackIntegration
-  > = (...args) => createOrUpdateSlackIntegration(deps, ...args);
   const testConnection: WithoutDeps<typeof testIntegrationConnection> = (
     ...args
   ) => testIntegrationConnection(deps, ...args);
-  const testExportConnection: WithoutDeps<
-    typeof testExportIntegrationConnection
-  > = (...args) => testExportIntegrationConnection(deps, ...args);
   const deleteBound: WithoutDeps<typeof deleteIntegration> = (...args) =>
     deleteIntegration(deps, ...args);
-  const completeSlackOAuthCallbackBound: WithoutDeps<
-    typeof completeSlackOAuthCallback
-  > = (...args) => completeSlackOAuthCallback(deps, ...args);
 
   return {
     getById,
     listForProject,
     upsert,
-    createOrUpdateSlack,
     testConnection,
-    testExportConnection,
     delete: deleteBound,
-    completeSlackOAuthCallback: completeSlackOAuthCallbackBound,
   };
 }

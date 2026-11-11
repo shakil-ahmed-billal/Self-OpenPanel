@@ -1,6 +1,5 @@
 import { useSuspenseQuery } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
-import { AiUsageWidget } from '@/components/ai/ai-usage-widget';
 import FullPageLoadingState from '@/components/full-page-loading-state';
 import { LatestEvents } from '@/components/profiles/latest-events';
 import { MostEvents } from '@/components/profiles/most-events';
@@ -108,10 +107,6 @@ function Component() {
             projectId={projectId}
           />
         ) : null}
-        <AiUsageWidget
-          entity={{ kind: 'profile', profileId }}
-          projectId={projectId}
-        />
       </aside>
 
       <div className="col min-w-0 gap-6">

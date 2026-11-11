@@ -3,7 +3,6 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import type { LanguageModel, streamText } from 'ai';
 import type { CoreConfig } from '../../../config';
-import { instrumentLanguageModel } from '../../ai/ai.service';
 import {
   CHAT_MODELS,
   type ChatModelEntry,
@@ -68,11 +67,9 @@ function modelFor(
   provider: ChatProvider,
   modelId: string
 ): LanguageModel {
-  const model =
-    provider === 'openai'
-      ? openai(config)(modelId)
-      : anthropic(config)(modelId);
-  return instrumentLanguageModel(config, model);
+  return provider === 'openai'
+    ? openai(config)(modelId)
+    : anthropic(config)(modelId);
 }
 
 export function resolveChatModel(

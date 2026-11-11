@@ -24,11 +24,11 @@ const pending = part({
 });
 
 const done = part({
-  type: 'tool-get_billing',
+  type: 'tool-get_overview',
   toolCallId: 'call_B',
   state: 'output-available',
   input: {},
-  output: { plan: 'growth' },
+  output: { unique_visitors: 42 },
 });
 
 describe('failInterruptedToolParts', () => {

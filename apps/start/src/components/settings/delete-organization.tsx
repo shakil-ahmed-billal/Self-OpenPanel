@@ -42,10 +42,6 @@ export default function DeleteOrganization({ organization }: Props) {
     return null;
   }
 
-  // Block deletion while a paid subscription is still active and not cancelled.
-  const blockDeletion =
-    organization.hasSubscription && !organization.isWillBeCanceled;
-
   return (
     <Widget className="w-full max-w-screen-md">
       <WidgetHead>
@@ -71,15 +67,6 @@ export default function DeleteOrganization({ organization }: Props) {
             </AlertDescription>
           </Alert>
         )}
-        {blockDeletion && !organization.deleteAt && (
-          <Alert variant="destructive">
-            <AlertTitle>Cancel your subscription first</AlertTitle>
-            <AlertDescription>
-              This organization has an active subscription. Cancel it from the
-              billing settings before you delete the organization.
-            </AlertDescription>
-          </Alert>
-        )}
         <div className="flex justify-start gap-4">
           {organization.deleteAt && (
             <Button
@@ -95,7 +82,7 @@ export default function DeleteOrganization({ organization }: Props) {
             </Button>
           )}
           <Button
-            disabled={blockDeletion || !!organization.deleteAt}
+            disabled={!!organization.deleteAt}
             icon={TrashIcon}
             onClick={() => {
               pushModal('ConfirmDeleteOrganization', {

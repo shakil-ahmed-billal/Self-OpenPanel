@@ -57,97 +57,14 @@ export interface TrackPayload {
   groups?: string[] | null;
 }
 
-export interface ReplayPayload {
-  chunk_index: number;
-  events_count: number;
-  is_full_snapshot: boolean;
-  started_at: string;
-  ended_at: string;
-  payload: string;
-  // Server-issued session id (from a prior /track response) the SDK echoes back,
-  // so the chunk is filed under the right session without device resolution.
-  sessionId?: string;
-}
-
-export type AiEventKind = 'generation' | 'embedding' | 'span' | 'trace';
-
-export interface AiUsage {
-  /** Includes cached tokens. */
-  inputTokens?: number;
-  /** Includes reasoning tokens. */
-  outputTokens?: number;
-  cacheReadTokens?: number;
-  cacheWriteTokens?: number;
-  reasoningTokens?: number;
-}
-
-export interface AiError {
-  message: string;
-  code?: string;
-  httpStatus?: number;
-}
-
-export interface AiModelParameters {
-  temperature?: number;
-  maxTokens?: number;
-  topP?: number;
-  topK?: number;
-  frequencyPenalty?: number;
-  presencePenalty?: number;
-  seed?: number;
-  stopSequences?: string[];
-  [key: string]: unknown;
-}
-
-/** One AI observability event: a model call, an embedding, a span or a trace root. */
-export interface AiPayload {
-  kind: AiEventKind;
-  /** Groups every event of one request. */
-  traceId: string;
-  /** Defaults to the event id. */
-  spanId?: string;
-  /** A span id or the trace id. */
-  parentId?: string;
-  /** Display name of this step or trace, e.g. `summarize`. */
-  name?: string;
-  /** Groups traces into a conversation or thread. */
-  conversationId?: string;
-  model?: string;
-  provider?: string;
-  /** Messages for a generation, any JSON for a span or trace, strings for an embedding. */
-  input?: unknown;
-  output?: unknown;
-  tools?: unknown;
-  usage?: AiUsage;
-  /** USD. When given it is stored as is instead of being computed. */
-  cost?: number;
-  latencyMs?: number;
-  timeToFirstTokenMs?: number;
-  error?: AiError | null;
-  stopReason?: string;
-  stream?: boolean;
-  modelParameters?: AiModelParameters;
-  /** Drops input, output and tools before storage. */
-  privacyMode?: boolean;
-  properties?: Record<string, unknown>;
-  profileId?: ProfileId;
-  groups?: string[] | null;
-  /** Binds the event to a web session's device. */
-  deviceId?: string;
-  /** ISO 8601. Back-dates the event. */
-  timestamp?: string;
-}
-
 export type TrackHandlerPayload =
   | { type: 'track'; payload: TrackPayload }
   | { type: 'identify'; payload: IdentifyPayload }
   | { type: 'increment'; payload: IncrementPayload }
   | { type: 'decrement'; payload: DecrementPayload }
   | { type: 'alias'; payload: AliasPayload }
-  | { type: 'replay'; payload: ReplayPayload }
   | { type: 'group'; payload: GroupPayload }
-  | { type: 'assign_group'; payload: AssignGroupPayload }
-  | { type: 'ai'; payload: AiPayload };
+  | { type: 'assign_group'; payload: AssignGroupPayload };
 
 export interface TrackProperties {
   [key: string]: unknown;
@@ -220,9 +137,6 @@ export class OpenPanel {
     if (this.options.waitForProfile && !this.profileId) {
       return true;
     }
-    if (payload.type === 'replay' && !this.sessionId) {
-      return true;
-    }
     return false;
   }
 
@@ -232,9 +146,6 @@ export class OpenPanel {
         ...(payload.payload.properties ?? {}),
         __timestamp: new Date().toISOString(),
       };
-    }
-    if (payload.type === 'ai' && !payload.payload.timestamp) {
-      payload.payload.timestamp = new Date().toISOString();
     }
 
     this.queue.push(payload);
@@ -250,21 +161,14 @@ export class OpenPanel {
       return Promise.resolve();
     }
 
-    // Disable keepalive for replay since it has a hard body limit and breaks the request
     const result = await this.api.fetch<
       TrackHandlerPayload,
       { deviceId: string; sessionId: string }
-    >('/track', payload, { keepalive: payload.type !== 'replay' });
-    // An ai event is stored without a device or session, so its empty ids
-    // must not replace the ones the other events resolved.
-    if (payload.type === 'ai') {
-      return result;
-    }
+    >('/track', payload, { keepalive: true });
     this.deviceId = result?.deviceId;
     const hadSession = !!this.sessionId;
     this.sessionId = result?.sessionId;
 
-    // Flush queued items (e.g. replay chunks) when sessionId first arrives
     if (!hadSession && this.sessionId) {
       this.flush();
     }
@@ -300,25 +204,8 @@ export class OpenPanel {
   }
 
   /**
-   * Records one AI observability event (a model call, embedding, span or
-   * trace root). The sticky profile id and groups from `identify()` /
-   * `setGroups()` are merged in, like `track()`.
+   * Records an event.
    */
-  ai(payload: AiPayload) {
-    this.log('ai event', payload.kind, payload.traceId);
-    const mergedGroups = [
-      ...new Set([...this.groups, ...(payload.groups ?? [])]),
-    ];
-    return this.send({
-      type: 'ai',
-      payload: {
-        ...payload,
-        profileId: payload.profileId ?? this.profileId,
-        groups: mergedGroups.length > 0 ? mergedGroups : undefined,
-      },
-    });
-  }
-
   identify(payload: IdentifyPayload) {
     this.log('identify user', payload);
     if (payload.profileId) {
@@ -432,12 +319,6 @@ export class OpenPanel {
   private buildFlushPayload(
     item: TrackHandlerPayload
   ): TrackHandlerPayload['payload'] {
-    if (item.type === 'replay') {
-      return {
-        ...item.payload,
-        sessionId: item.payload.sessionId ?? this.sessionId,
-      };
-    }
     if (item.type === 'track') {
       const queuedGroups =
         'groups' in item.payload ? (item.payload.groups ?? []) : [];
@@ -462,16 +343,6 @@ export class OpenPanel {
       return {
         ...item.payload,
         profileId: item.payload.profileId ?? this.profileId,
-      };
-    }
-    if (item.type === 'ai') {
-      const mergedGroups = [
-        ...new Set([...this.groups, ...(item.payload.groups ?? [])]),
-      ];
-      return {
-        ...item.payload,
-        profileId: item.payload.profileId ?? this.profileId,
-        groups: mergedGroups.length > 0 ? mergedGroups : undefined,
       };
     }
     return item.payload;

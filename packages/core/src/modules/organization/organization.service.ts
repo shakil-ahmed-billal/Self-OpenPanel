@@ -8,13 +8,8 @@ import type {
   Prisma,
   User,
 } from '@openpanel/db/src/prisma-client';
-import { DateTime, generateSecureId } from '@openpanel/shared';
-import {
-  cacheablePerDb,
-  cacheablePerDeps,
-  type DbScope,
-} from '../../cacheable-per-deps';
-import { chQuery } from '../../ch-query';
+import { generateSecureId } from '@openpanel/shared';
+import { cacheablePerDb, type DbScope } from '../../cacheable-per-deps';
 import { sendEmail } from '../../clients/email';
 import {
   TRPCBadRequestError,
@@ -29,7 +24,6 @@ import {
   getOrganizationAccess,
   getProjectAccess,
 } from '../../shared/access-lookups';
-import { formatClickhouseDate } from '../../shared/ch-dates';
 import { replicatedTarget, TABLE_NAMES } from '../../shared/ch-tables';
 import {
   DEFAULT_TIMEZONE,
@@ -54,10 +48,6 @@ export type IServiceMember = Omit<
   projectScope: ProjectScope;
   projects: { projectId: string; level: AccessLevel | null }[];
 };
-
-// Session bookkeeping rows are worker-generated (the reaper can emit
-// session_end long after tracking stopped), so they are not billable activity.
-const NON_BILLABLE_EVENT_NAMES = ['session_start', 'session_end'];
 
 const DELETE_GRACE_PERIOD_MS = 24 * 60 * 60 * 1000;
 const INVITE_EXPIRY_MS = 3 * 24 * 60 * 60 * 1000;
@@ -365,232 +355,6 @@ export async function acceptInvite(
   return { organizationId: invite.organizationId };
 }
 
-export async function getOrganizationBillingEventsCount(
-  deps: ServiceDeps,
-  organization: IServiceOrganization & { projects: { id: string }[] }
-): Promise<number | undefined> {
-  // Trials have no Polar billing period; fall back to the trial window
-  // (creation → trial end). Status stays 'trialing' even once expired.
-  const isTrialStatus = organization.subscriptionStatus === 'trialing';
-  const periodStart =
-    organization.subscriptionCurrentPeriodStart ??
-    (isTrialStatus ? organization.createdAt : null);
-  const periodEnd =
-    organization.subscriptionCurrentPeriodEnd ??
-    (isTrialStatus ? organization.subscriptionEndsAt : null);
-
-  if (!(periodStart && periodEnd) || organization.projects.length === 0) {
-    return 0;
-  }
-
-  const statement = sql`
-    SELECT COUNT(*) AS count
-    FROM ${sql.id(TABLE_NAMES.events)} e
-    WHERE project_id IN ${sql.array(
-      'String',
-      organization.projects.map((project) => project.id)
-    )}
-      AND created_at BETWEEN ${sql.string(formatClickhouseDate(periodStart))} AND ${sql.string(formatClickhouseDate(periodEnd))}
-      AND name NOT IN ${sql.array('String', NON_BILLABLE_EVENT_NAMES)}
-  `;
-
-  const res = await chQuery<{ count: number }>(deps, statement);
-  return res[0]?.count;
-}
-
-// Lifetime event count for a set of projects (excluding session bookkeeping
-// events). The onboarding emails use this instead of subscriptionPeriodEventsCount,
-// which only refreshes when sessions end.
-export async function getOrganizationEventsCount(
-  deps: ServiceDeps,
-  projectIds: string[]
-): Promise<number> {
-  if (projectIds.length === 0) {
-    return 0;
-  }
-
-  const statement = sql`
-    SELECT COUNT(*) AS count
-    FROM ${sql.id(TABLE_NAMES.events)} e
-    WHERE project_id IN ${sql.array('String', projectIds)}
-      AND name NOT IN ${sql.array('String', NON_BILLABLE_EVENT_NAMES)}
-  `;
-
-  const res = await chQuery<{ count: number }>(deps, statement);
-  return res[0]?.count ?? 0;
-}
-
-// Events in a recent window, for organizations whose trial lapsed but whose
-// SDKs never stopped. The lifetime count above says "you once used this"; this
-// one says "you are using this right now", which is the only number that
-// actually argues for a subscription.
-export async function getOrganizationEventsCountSince(
-  deps: ServiceDeps,
-  projectIds: string[],
-  since: Date
-): Promise<number> {
-  if (projectIds.length === 0) {
-    return 0;
-  }
-
-  const statement = sql`
-    SELECT COUNT(*) AS count
-    FROM ${sql.id(TABLE_NAMES.events)} e
-    WHERE project_id IN ${sql.array('String', projectIds)}
-      AND name NOT IN ${sql.array('String', NON_BILLABLE_EVENT_NAMES)}
-      AND created_at >= ${sql.string(formatClickhouseDate(since, true))}
-  `;
-
-  const res = await chQuery<{ count: number }>(deps, statement);
-  return res[0]?.count ?? 0;
-}
-
-export interface IOrganizationBillingUsageInput {
-  projectIds: string[];
-  /** Inclusive UTC day, `YYYY-MM-DD`. */
-  from: string;
-  /** Inclusive UTC day, `YYYY-MM-DD`. */
-  to: string;
-  /** Exact lower bound within `from`, `YYYY-MM-DD HH:mm:ss` UTC, when the window starts mid-day. */
-  since?: string;
-}
-
-export interface IOrganizationBillingUsage {
-  from: string;
-  to: string;
-  /** One row per UTC day in the window, zero-filled; `counts` is keyed by project id. */
-  days: { day: string; counts: Record<string, number> }[];
-  /** Billable events per project over the window. */
-  projectTotals: Record<string, number>;
-  /** The most frequent billable event names over the window, descending. */
-  eventNames: { name: string; count: number }[];
-  /** The same per project, keyed by project id. */
-  eventNamesByProject: Record<string, { name: string; count: number }[]>;
-}
-
-// Enough slices for a legible pie; the dashboard folds the rest into "Other".
-export const BILLING_USAGE_EVENT_NAMES_LIMIT = 9;
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-function listUtcDays(from: string, to: string): string[] {
-  const days: string[] = [];
-  const end = new Date(`${to}T00:00:00.000Z`).getTime();
-  for (
-    let cursor = new Date(`${from}T00:00:00.000Z`).getTime();
-    cursor <= end;
-    cursor += MS_PER_DAY
-  ) {
-    days.push(new Date(cursor).toISOString().slice(0, 10));
-  }
-  return days;
-}
-
-export async function getOrganizationBillingUsage(
-  deps: ServiceDeps,
-  { projectIds, from, to, since }: IOrganizationBillingUsageInput
-): Promise<IOrganizationBillingUsage> {
-  const empty: IOrganizationBillingUsage = {
-    from,
-    to,
-    days: listUtcDays(from, to).map((day) => ({ day, counts: {} })),
-    projectTotals: {},
-    eventNames: [],
-    eventNamesByProject: {},
-  };
-  if (projectIds.length === 0) {
-    return empty;
-  }
-
-  // Both statements share the billable-event filter so the pie's "Other"
-  // slice (total minus the named slices) adds up against the bars.
-  const billable = sql`
-    project_id IN ${sql.array('String', projectIds)}
-      AND toDate(created_at) BETWEEN toDate(${sql.string(from)}) AND toDate(${sql.string(to)})
-      ${since ? sql`AND created_at >= ${sql.string(since)}` : sql.empty}
-      AND name NOT IN ${sql.array('String', NON_BILLABLE_EVENT_NAMES)}
-  `;
-  const [perProjectDay, perName, perProjectName] = await Promise.all([
-    chQuery<{ project_id: string; day: string; count: number }>(
-      deps,
-      sql`
-        SELECT project_id, toDate(created_at) AS day, COUNT(*) AS count
-        FROM ${sql.id(TABLE_NAMES.events)}
-        WHERE ${billable}
-        GROUP BY project_id, day
-      `
-    ),
-    chQuery<{ name: string; count: number }>(
-      deps,
-      sql`
-        SELECT name, COUNT(*) AS count
-        FROM ${sql.id(TABLE_NAMES.events)}
-        WHERE ${billable}
-        GROUP BY name
-        ORDER BY count DESC
-        LIMIT ${sql.uint64(BILLING_USAGE_EVENT_NAMES_LIMIT)}
-      `
-    ),
-    chQuery<{ project_id: string; name: string; count: number }>(
-      deps,
-      sql`
-        SELECT project_id, name, COUNT(*) AS count
-        FROM ${sql.id(TABLE_NAMES.events)}
-        WHERE ${billable}
-        GROUP BY project_id, name
-        ORDER BY project_id, count DESC
-        LIMIT ${sql.uint64(BILLING_USAGE_EVENT_NAMES_LIMIT)} BY project_id
-      `
-    ),
-  ]);
-
-  const countsByDay = new Map(empty.days.map((row) => [row.day, row.counts]));
-  for (const row of perProjectDay) {
-    const count = Number(row.count);
-    countsByDay.get(row.day)![row.project_id] = count;
-    empty.projectTotals[row.project_id] =
-      (empty.projectTotals[row.project_id] ?? 0) + count;
-  }
-  empty.eventNames = perName.map((row) => ({
-    name: row.name,
-    count: Number(row.count),
-  }));
-  for (const row of perProjectName) {
-    const names = empty.eventNamesByProject[row.project_id] ?? [];
-    names.push({ name: row.name, count: Number(row.count) });
-    empty.eventNamesByProject[row.project_id] = names;
-  }
-  return empty;
-}
-
-const BILLING_USAGE_CACHE_TTL_SEC = 60 * 10;
-export const getOrganizationBillingUsageCached = cacheablePerDeps(
-  'getOrganizationBillingUsage',
-  (deps: ServiceDeps, input: IOrganizationBillingUsageInput) =>
-    getOrganizationBillingUsage(deps, input),
-  BILLING_USAGE_CACHE_TTL_SEC
-);
-
-export async function getOrganizationSubscriptionChartEndDate(
-  deps: ServiceDeps,
-  projectId: string,
-  endDate: string
-): Promise<string | null> {
-  const organization = await getOrganizationByProjectIdCached(deps, projectId);
-  if (!organization) {
-    return null;
-  }
-  if (
-    organization.subscriptionChartEndDate &&
-    new Date(endDate) > organization.subscriptionChartEndDate
-  ) {
-    return DateTime.fromJSDate(organization.subscriptionChartEndDate)
-      .setZone(organization.timezone || DEFAULT_TIMEZONE)
-      .toFormat('yyyy-MM-dd HH:mm:ss');
-  }
-
-  return endDate;
-}
-
 export async function getSettingsForOrganization(
   deps: ServiceDeps,
   organizationId: string
@@ -751,12 +515,6 @@ export async function runDeleteCron(
     include: { projects: { select: { id: true } } },
   });
 
-  // Skip paying organizations
-  const deletableOrganizations = organizations.filter(
-    (organization) =>
-      !(organization.hasSubscription && !organization.isWillBeCanceled)
-  );
-
   const scheduledProjects = await db.project.findMany({
     where: { deleteAt: { lte: now } },
     select: { id: true },
@@ -764,7 +522,7 @@ export async function runDeleteCron(
 
   const projectIds = [
     ...new Set([
-      ...deletableOrganizations.flatMap((organization) =>
+      ...organizations.flatMap((organization) =>
         organization.projects.map((project) => project.id)
       ),
       ...scheduledProjects.map((project) => project.id),
@@ -776,12 +534,12 @@ export async function runDeleteCron(
     await deleteProjects(deps, projectIds);
   }
 
-  for (const organization of deletableOrganizations) {
+  for (const organization of organizations) {
     await deleteOrganization(deps, organization.id);
   }
 
   return {
-    organizations: deletableOrganizations.length,
+    organizations: organizations.length,
     projects: projectIds.length,
   };
 }
@@ -817,16 +575,7 @@ export async function scheduleOrganizationDeletion(
   organizationId: string
 ): Promise<void> {
   const db = deps.db;
-  const organization = await getOrganizationById(deps, organizationId);
-
-  // Require billing to be cancelled first. We don't want to delete an
-  // organization that still has a live paid subscription. Once the user has
-  // cancelled (the subscription is scheduled to end), deletion is allowed.
-  if (organization.hasSubscription && !organization.isWillBeCanceled) {
-    throw new TRPCBadRequestError(
-      'Please cancel your subscription before deleting this organization.'
-    );
-  }
+  await getOrganizationById(deps, organizationId);
 
   const deleteAt = new Date(Date.now() + DELETE_GRACE_PERIOD_MS);
   await db.$transaction([

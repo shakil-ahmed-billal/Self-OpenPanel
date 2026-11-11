@@ -33,13 +33,6 @@ const subscribeToProjectEventBatches = mock(
   }
 );
 
-let notificationCallback: ((notification: unknown) => void) | undefined;
-const subscribeToProjectNotifications = mock(
-  async (_projectId: string, onNotification: (n: unknown) => void) => {
-    notificationCallback = onNotification;
-    return () => undefined;
-  }
-);
 const subscribeToOrganizationSubscriptionUpdates = mock(
   async (_organizationId: string, _onUpdate: (message: unknown) => void) =>
     () =>
@@ -58,7 +51,6 @@ mock.module('./realtime.service', () => ({
   getActiveVisitorCount,
   subscribeToVisitorActivity,
   subscribeToProjectEventBatches,
-  subscribeToProjectNotifications,
   subscribeToOrganizationSubscriptionUpdates,
 }));
 
@@ -117,12 +109,10 @@ beforeEach(async () => {
   activeVisitorCount = 0;
   visitorActivityCallback = undefined;
   eventBatchCallback = undefined;
-  notificationCallback = undefined;
   shareWidgets = {};
   for (const m of [
     subscribeToVisitorActivity,
     subscribeToProjectEventBatches,
-    subscribeToProjectNotifications,
     subscribeToOrganizationSubscriptionUpdates,
     unsubscribeVisitorActivity,
     unsubscribeEventBatches,
@@ -372,35 +362,4 @@ test('wsOrganizationEvents: subscribes scoped to the organization the caller is 
   );
 
   ws.close();
-});
-
-test('wsProjectNotifications: no session -> "No active session" then close', async () => {
-  const { nextMessage, nextClose } = await connect(
-    '/live/notifications/proj_1'
-  );
-
-  await expect(nextMessage()).resolves.toBe('No active session');
-  await nextClose();
-  expect(subscribeToProjectNotifications).not.toHaveBeenCalled();
-});
-
-test('wsProjectNotifications: a member removed after connecting gets no further notifications', async () => {
-  session = { userId: 'user_1' };
-  projectAccess = { level: 'read' };
-
-  const { nextMessage, nextClose } = await connect(
-    '/live/notifications/proj_1'
-  );
-  await waitFor(() => !!notificationCallback);
-
-  notificationCallback?.({ projectId: 'proj_1', title: 'first' });
-  expect(getSuperJson<{ title: string }>(await nextMessage())?.title).toBe(
-    'first'
-  );
-
-  projectAccess = null;
-  notificationCallback?.({ projectId: 'proj_1', title: 'second' });
-
-  await expect(nextMessage()).resolves.toBe('No access');
-  await nextClose();
 });

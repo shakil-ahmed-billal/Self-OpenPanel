@@ -3,7 +3,7 @@
  *
  * Drives the REAL stack over HTTP and asserts the resulting state in BOTH
  * ClickHouse and Redis through the full lifecycle — open, extend, close (via
- * reaper AND via boundary), replay, identify — including Redis cleanup.
+ * reaper AND via boundary), identify — including Redis cleanup.
  *
  * Run (shrink the idle window; start the stack with the SAME value):
  *   SESSION_TIMEOUT_MS=4000 pnpm dev
@@ -206,36 +206,6 @@ async function scenarioNonScreenViewFirst() {
   check('redis: session cleaned up after close', !!cleaned);
 }
 
-async function scenarioReplay() {
-  scenario('replay chunk files under the echoed session id');
-  const ip = `10.${(runId >> 16) & 255}.3.${runId & 255 || 1}`;
-
-  const { sessionId } = await screenView(ip, '/replay');
-  await track(
-    {
-      type: 'replay',
-      payload: {
-        sessionId,
-        chunk_index: 0,
-        events_count: 1,
-        is_full_snapshot: true,
-        started_at: new Date(runId).toISOString(),
-        ended_at: new Date(runId + 1000).toISOString(),
-        payload: '[]',
-      },
-    },
-    ip
-  );
-
-  const found = await pollUntil(async () => {
-    const rows = await chQuery<{ c: string }>(
-      `SELECT count() AS c FROM session_replay_chunks WHERE project_id = '${PROJECT_ID}' AND session_id = '${sessionId}'`
-    );
-    return Number(rows[0]?.c ?? 0) > 0 ? true : null;
-  });
-  check('clickhouse: replay chunk stored under the session id', !!found);
-}
-
 async function scenarioIdentify() {
   scenario('identified visit → profile index + profile_id on events');
   const ip = `10.${(runId >> 16) & 255}.4.${runId & 255 || 1}`;
@@ -273,7 +243,6 @@ async function main() {
   await scenarioSingleSession();
   await scenarioBoundary();
   await scenarioNonScreenViewFirst();
-  await scenarioReplay();
   await scenarioIdentify();
   await shutdown(summarize());
 }

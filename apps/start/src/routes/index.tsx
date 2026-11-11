@@ -5,7 +5,6 @@ import { LogoSquare } from '@/components/logo';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { useLogout } from '@/hooks/use-logout';
-import { useNumber } from '@/hooks/use-numer-formatter';
 import { useTRPC } from '@/integrations/trpc/react';
 import { isSignedIn } from '@/utils/route-session';
 import { createTitle } from '@/utils/title';
@@ -53,7 +52,6 @@ function LandingPage() {
   const { data: organizations } = useSuspenseQuery(
     trpc.organization.list.queryOptions()
   );
-  const number = useNumber();
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center">
@@ -80,11 +78,6 @@ function LandingPage() {
                   ({org.id})
                 </span>
               </div>
-              <span>
-                {number.format(org.subscriptionPeriodEventsCount)}
-                <span className="mx-1 opacity-50">/</span>
-                {number.format(org.subscriptionPeriodEventsLimit)}
-              </span>
             </Link>
           ))}
         </div>

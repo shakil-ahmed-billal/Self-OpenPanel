@@ -34,7 +34,6 @@ function stubJobCtx(
     insight: {} as Services['insight'],
     integration: {} as Services['integration'],
     gsc: {} as Services['gsc'],
-    import: {} as Services['import'],
     ingest: {} as Services['ingest'],
     cohort: {} as Services['cohort'],
     organization: organization as ReturnType<typeof createOrganizationService>,
@@ -61,12 +60,10 @@ function stubJobCtx(
     client: {} as Services['client'],
     project: {} as Services['project'],
     user: {} as Services['user'],
-    subscription: {} as Services['subscription'],
     salt: {} as Services['salt'],
     conversation: {} as Services['conversation'],
     assistant: {} as Services['assistant'],
     mcp: {} as Services['mcp'],
-    ai: {} as Services['ai'],
   };
   return {
     auth: null,
@@ -94,7 +91,6 @@ test('the cron queue declares delete on the cron queue', () => {
 
 test('the organization cron fragment is spread into the cron queue', () => {
   expect(queues.cron.jobs.delete).toBeDefined();
-  expect(queues.cron.jobs.windDown).toBeDefined();
 });
 
 test('delete delegates to runDeleteCron', async () => {
@@ -114,5 +110,4 @@ test('delete delegates to runDeleteCron', async () => {
 // Pins the cadences, read straight off the registry.
 test('the organization cron fragment keeps its scheduler id and cadence', () => {
   expect(queues.cron.jobs.delete.cron).toEqual({ pattern: '0 * * * *' });
-  expect(queues.cron.jobs.windDown.cron).toEqual({ pattern: '0 * * * *' });
 });

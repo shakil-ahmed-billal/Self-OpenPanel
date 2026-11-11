@@ -8,10 +8,8 @@
   "files": {
     "includes": [
       "!apps/start/src/routeTree.gen.ts",
-      "!apps/api/scripts/mock-big.json",
       "!packages/db/src/generated",
-      "!packages/core/src/clients/datacenter-asns.ts",
-      "!packages/core/src/modules/import/src/providers/__fixtures__/*.json"
+      "!packages/core/src/clients/datacenter-asns.ts"
     ]
   },
   "assist": {

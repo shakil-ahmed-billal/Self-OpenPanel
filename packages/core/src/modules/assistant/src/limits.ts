@@ -1,13 +1,7 @@
-import {
-  getSubscriptionState,
-  type SubscriptionStateInput,
-  subscriptionBlocksDashboard,
-} from '@openpanel/payments/subscription-state';
 import type { Logger } from '../../../logger';
 import {
   CHAT_BURST_LIMIT,
   CHAT_MESSAGES_PER_DAY,
-  CHAT_TIER_EVENT_BANDS,
   type ChatLimitError,
   type ChatTier,
 } from '../assistant.constants';
@@ -23,39 +17,15 @@ const TIER_LABELS: Record<ChatTier, string> = {
   starter: 'Starter',
   growth: 'Growth',
   scale: 'Scale',
-  unlimited: 'self-hosted',
+  unlimited: 'unlimited',
   blocked: 'inactive',
 };
 
-export type ChatTierInput = SubscriptionStateInput & {
-  subscriptionPeriodEventsLimit: number;
-};
-
 export function resolveChatTier(
-  organization: ChatTierInput,
-  selfHosted: boolean
+  _organization: unknown,
+  _selfHosted: boolean
 ): ChatTier {
-  if (selfHosted) {
-    return 'unlimited';
-  }
-  const state = getSubscriptionState(organization);
-  if (state === 'self_hosted') {
-    return 'unlimited';
-  }
-  if (state === 'trialing') {
-    return 'trial';
-  }
-  if (subscriptionBlocksDashboard(state)) {
-    return 'blocked';
-  }
-  const events = organization.subscriptionPeriodEventsLimit;
-  if (events <= CHAT_TIER_EVENT_BANDS.starter) {
-    return 'starter';
-  }
-  if (events <= CHAT_TIER_EVENT_BANDS.growth) {
-    return 'growth';
-  }
-  return 'scale';
+  return 'unlimited';
 }
 
 /** The subset of the Redis client the counters need; narrow so tests can stub it. */

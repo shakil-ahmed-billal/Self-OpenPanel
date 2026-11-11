@@ -7,28 +7,23 @@ const GOLDEN_SCHEDULER_IDS = [
   'cohortRefresh',
   'dataHealth',
   'delete',
-  'flushAiEvents',
   'flushBots',
   'flushEvents',
-  'flushExports',
   'flushGroups',
   'flushProfileBackfill',
   'flushProfiles',
-  'flushReplay',
   'flushSessions',
   'gscSync',
   'insightCleanup',
   'insightsDaily',
-  'onboarding',
   'ping',
   'salt',
   'sessionReaper',
   'sessionVacuum',
   'weeklyDigest',
-  'windDown',
 ].sort();
 
-// Retry and retention values pinned as they are: five queues never retry and
+// Retry and retention values pinned as they are: four queues never retry and
 // every queue bounds its failed set.
 const PINNED_DEFAULTS = {
   sessions: {
@@ -36,11 +31,6 @@ const PINNED_DEFAULTS = {
     removeOnFail: { age: 86_400, count: 1000 },
   },
   cron: { removeOnComplete: 10, removeOnFail: { age: 86_400, count: 100 } },
-  notification: {
-    removeOnComplete: 10,
-    removeOnFail: { age: 86_400, count: 100 },
-  },
-  import: { removeOnComplete: 10, removeOnFail: 50 },
   insights: {
     removeOnComplete: 100,
     removeOnFail: { age: 86_400, count: 100 },
@@ -57,21 +47,17 @@ const PINNED_DEFAULTS = {
 const PINNED_CONCURRENCY = {
   sessions: 1,
   cron: 4,
-  notification: 1,
-  import: 1,
   insights: 5,
   gsc: 5,
   cohortCompute: 2,
 } as const;
 
-test('the registry declares the seven queues, keyed by their Redis names', () => {
+test('the registry declares the five queues, keyed by their Redis names', () => {
   expect(Object.keys(queues).sort()).toEqual([
     'cohortCompute',
     'cron',
     'gsc',
-    'import',
     'insights',
-    'notification',
     'sessions',
   ]);
 
@@ -119,25 +105,20 @@ test('the cron queue carries the insight module cron fragment', () => {
       'cohortRefresh',
       'dataHealth',
       'delete',
-      'flushAiEvents',
       'flushBots',
-      'flushExports',
       'flushEvents',
       'flushGroups',
       'flushProfileBackfill',
       'flushProfiles',
-      'flushReplay',
       'flushSessions',
       'gscSync',
       'insightCleanup',
       'insightsDaily',
-      'onboarding',
       'ping',
       'salt',
       'sessionReaper',
       'sessionVacuum',
       'weeklyDigest',
-      'windDown',
     ].sort()
   );
   for (const name of ['insightsDaily', 'insightCleanup', 'weeklyDigest']) {
@@ -189,13 +170,6 @@ test('the cron queue carries the organization module cron fragment', () => {
   });
 });
 
-test('the cron queue carries the onboarding module cron fragment', () => {
-  expect(queues.cron.jobs.onboarding).toMatchObject({
-    queue: 'cron',
-    name: 'onboarding',
-  });
-});
-
 // legacyCompat.sessions maps the legacy `createSessionEnd` job onto this name;
 // the scheduler ids double as the job names.
 test('the sessions queue carries the session module job', () => {
@@ -214,27 +188,7 @@ test('the cron queue carries the session module cron fragment', () => {
   }
 });
 
-// No cron fragment: imports are always user-triggered. legacyCompat.import
-// discriminates on this name (jobs/compat.ts).
-test('the import queue carries the import module job', () => {
-  expect(Object.keys(queues.import.jobs)).toEqual(['import']);
-  expect(queues.import.jobs.import).toMatchObject({
-    queue: 'import',
-    name: 'import',
-  });
-});
-
-// No cron fragment: notifications are triggered by a rule match. legacyCompat.notification
-// discriminates on this name (jobs/compat.ts).
-test('the notification queue carries the notification module job', () => {
-  expect(Object.keys(queues.notification.jobs)).toEqual(['sendNotification']);
-  expect(queues.notification.jobs.sendNotification).toMatchObject({
-    queue: 'notification',
-    name: 'sendNotification',
-  });
-});
-
-test('the cron queue derives the golden 22 scheduler ids', () => {
+test('the cron queue derives the golden 17 scheduler ids', () => {
   const derivedIds = [
     ...schedulersFromRegistry(queues.cron).map((s) => s.id),
     PING_SCHEDULE.id,

@@ -1,35 +1,30 @@
-import { getSubscriptionStateMeta } from '@openpanel/payments/subscription-state-meta';
 import { Link, useParams } from '@tanstack/react-router';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ChevronDownIcon,
   CogIcon,
-  CreditCardIcon,
   LayoutListIcon,
   PlusIcon,
   UsersIcon,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { SidebarIcon, sidebarItemClassName } from './sidebar-link';
-import { Badge } from './ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
-import { useAppContext } from '@/hooks/use-app-context';
 import { useOrganizationAccess } from '@/hooks/use-organization-access';
 import { pushModal } from '@/modals';
 import type { RouterOutputs } from '@/trpc/client';
 import { cn } from '@/utils/cn';
 
 export default function SidebarOrganizationMenu({
-  organization,
+  organization: _organization,
 }: {
   organization: RouterOutputs['organization']['list'][number];
 }) {
-  const { isSelfHosted } = useAppContext();
   const { organizationId } = useParams({ strict: false });
   const { isAdmin } = useOrganizationAccess(organizationId);
 
@@ -53,32 +48,6 @@ export default function SidebarOrganizationMenu({
         <SidebarIcon icon={CogIcon} />
         <div className="flex-1">Settings</div>
       </Link>
-      {isAdmin && !isSelfHosted && (
-        <Link
-          activeOptions={{ exact: true }}
-          className={sidebarItemClassName}
-          from="/$organizationId"
-          to="/$organizationId/billing"
-        >
-          <SidebarIcon icon={CreditCardIcon} />
-          <div className="flex-1">Billing</div>
-          {(() => {
-            if (!organization) {
-              return null;
-            }
-            const badge = getSubscriptionStateMeta(
-              organization.subscriptionState,
-              {
-                endsAt: organization.subscriptionEndsAt,
-                canceledAt: organization.subscriptionCanceledAt,
-              }
-            ).badge;
-            return badge ? (
-              <Badge variant={badge.variant}>{badge.label}</Badge>
-            ) : null;
-          })()}
-        </Link>
-      )}
       {isAdmin && (
         <Link
           className={sidebarItemClassName}

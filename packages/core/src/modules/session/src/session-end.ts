@@ -8,30 +8,17 @@ import type { Logger } from '../../../logger';
 import type {
   IClickhouseEvent,
   IServiceCreateEventPayload,
-  IServiceEvent,
 } from '../../event/event.service';
-import type { INotificationRuleCached } from '../../notification/notification.service';
 import type { IClickhouseSession } from '../session.service';
 import { convertClickhouseDateToJs } from './dates';
 import type { SessionRuntime } from './runtime';
-import {
-  sessionDurationOnClose,
-  sessionEndsEmitted,
-  sessionEndsSkipped,
-  sessionEventsOnClose,
-} from './session.metrics';
-import { sessionEventsQuery } from './sql';
+import { sessionDurationOnClose, sessionEndsEmitted, sessionEndsSkipped, sessionEventsOnClose } from './session.metrics';
 
-const SESSION_END_JOB_ID_PREFIX = 'sessionEnd:v2';
-const SESSION_END_ATTEMPTS = 3;
-const SESSION_END_BACKOFF_MS = 200;
-
-/** Funnel rules are not evaluated for sessions longer than this. */
-const MAX_SESSION_EVENTS = 500;
 /** 2h — well past any plausible retry window. */
 const SESSION_END_CLAIM_TTL_SECONDS = 60 * 60 * 2;
-/** The events query pads the session's own bounds by this much on each side. */
-const SESSION_EVENTS_WINDOW_PADDING_MS = 1000;
+const SESSION_END_ATTEMPTS = 3;
+const SESSION_END_BACKOFF_MS = 200;
+const SESSION_END_JOB_ID_PREFIX = 'sessionEnd:v2';
 /** The session_end event lands one second after the last event. */
 const SESSION_END_OFFSET_MS = 1000;
 
@@ -97,23 +84,12 @@ export interface SessionEndDeps extends SessionRuntime {
   createEvent(
     payload: IServiceCreateEventPayload
   ): Promise<{ document: IClickhouseEvent }>;
-  transformEvent(event: IClickhouseEvent): IServiceEvent;
-  transformSessionToEvent(session: IClickhouseSession): IServiceEvent;
-  getEvents(
-    query: ReturnType<typeof sessionEventsQuery>
-  ): Promise<IServiceEvent[]>;
   profileBackfill: {
     add(entry: {
       projectId: string;
       sessionId: string;
       profileId: string;
     }): Promise<unknown>;
-  };
-  notifications: {
-    getRules(projectId: string): Promise<INotificationRuleCached[]>;
-    hasFunnelRules(rules: INotificationRuleCached[]): boolean;
-    /** Enqueues through the notification queue. */
-    checkFunnelRules(events: IServiceEvent[]): Promise<unknown>;
   };
 }
 
@@ -237,20 +213,6 @@ export async function createSessionEnd(
     profileId,
   });
 
-  try {
-    await notifyFunnelRules(
-      session,
-      payload.projectId,
-      deps.transformEvent(sessionEndEvent),
-      deps
-    );
-  } catch (error) {
-    logger.error(
-      { err: error },
-      'Creating notificatios for session end failed'
-    );
-  }
-
   await deps.sessions
     .cleanup({
       projectId: session.project_id,
@@ -266,46 +228,4 @@ export async function createSessionEnd(
     });
 
   return sessionEndEvent;
-}
-
-async function notifyFunnelRules(
-  session: IClickhouseSession,
-  projectId: string,
-  sessionEndEvent: IServiceEvent,
-  deps: SessionEndDeps
-): Promise<void> {
-  const rules = await deps.notifications.getRules(projectId);
-  const isEventCountReasonable =
-    session.event_count + session.screen_view_count < MAX_SESSION_EVENTS;
-
-  if (!(deps.notifications.hasFunnelRules(rules) && isEventCountReasonable)) {
-    return;
-  }
-
-  const events = await getSessionEvents(session, deps);
-  if (events.length > 0) {
-    await deps.notifications.checkFunnelRules([...events, sessionEndEvent]);
-  }
-}
-
-/** The session's events plus its own exit page, newest first. */
-async function getSessionEvents(
-  session: IClickhouseSession,
-  deps: SessionEndDeps
-): Promise<IServiceEvent[]> {
-  const startAt = convertClickhouseDateToJs(session.created_at);
-  const endAt = convertClickhouseDateToJs(session.ended_at);
-  const eventsInDb = await deps.getEvents(
-    sessionEventsQuery({
-      sessionId: session.id,
-      projectId: session.project_id,
-      startAt: new Date(startAt.getTime() - SESSION_EVENTS_WINDOW_PADDING_MS),
-      endAt: new Date(endAt.getTime() + SESSION_EVENTS_WINDOW_PADDING_MS),
-      limit: MAX_SESSION_EVENTS,
-    })
-  );
-
-  return [deps.transformSessionToEvent(session), ...eventsInDb].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
 }

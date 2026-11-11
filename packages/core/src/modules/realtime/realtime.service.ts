@@ -545,23 +545,6 @@ export async function subscribeToProjectEventBatches(
   });
 }
 
-export async function subscribeToProjectNotifications(
-  projectId: string,
-  onNotification: (
-    notification: IPublishChannels['notification']['created']
-  ) => void
-): Promise<() => void> {
-  return subscribeToPublishedEvent(
-    'notification',
-    'created',
-    (notification) => {
-      if (notification.projectId === projectId) {
-        onNotification(notification);
-      }
-    }
-  );
-}
-
 /**
  * Scoped to the single organization the caller's membership was verified against.
  * The channel is instance-wide: unscoped, every subscriber saw the `organizationId`

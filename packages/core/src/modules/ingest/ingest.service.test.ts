@@ -2,9 +2,7 @@
  * Tests for: - getOverrideDeviceId — the guard around a track event's
  * caller-supplied `__deviceId` (it becomes a Redis key segment, a BullMQ jobId
  * and a ClickHouse device_id, so it must be trimmed, non-empty, and
- * length-bounded). - handleReplay — replay files a chunk under the session id
- * the SDK echoes back; it needs no device resolution and trusts the client-sent
- * session id. - ingestTrack — the single events transport: every tracked event
+ * length-bounded). - ingestTrack — the single events transport: every tracked event
  * goes to Kafka via the injected producer, with no branch and no fallback
  * queue.
  *
@@ -22,9 +20,8 @@ import {
   mock,
 } from 'bun:test';
 import { testCoreConfig } from '../../../test/config-fixture';
-import type { Buffers } from '../../buffers/create-buffers';
 import type { GeoLocation } from '../../clients/geo';
-import type { IReplayPayload, ITrackHandlerPayload } from './ingest.constants';
+import type { ITrackHandlerPayload } from './ingest.constants';
 
 const getGeoLocation = mock(
   async (): Promise<GeoLocation> => ({
@@ -54,7 +51,6 @@ let getOverrideDeviceId: typeof import('./ingest.service').getOverrideDeviceId;
 let getTimestamp: typeof import('./ingest.service').getTimestamp;
 let getPropertyTimestamp: typeof import('./ingest.service').getPropertyTimestamp;
 let getUserDefinedTimestamp: typeof import('./ingest.service').getUserDefinedTimestamp;
-let handleReplay: typeof import('./ingest.service').handleReplay;
 let ingestTrack: typeof import('./ingest.service').ingestTrack;
 
 // The profile module is spread and then overridden by name: event.service
@@ -85,7 +81,6 @@ beforeAll(async () => {
     getPropertyTimestamp,
     getTimestamp,
     getUserDefinedTimestamp,
-    handleReplay,
     ingestTrack,
   } = await import('./ingest.service'));
 });
@@ -143,18 +138,7 @@ describe('getTimestamp', () => {
     expect(result.isTimestampFromThePast).toBe(false);
   });
 
-  it('reads an ai payload back-date from its own field', () => {
-    const at = '2024-01-15T10:30:00.000Z';
-    const body = {
-      type: 'ai',
-      payload: { kind: 'span', traceId: 'trace-1', timestamp: at },
-    } as ITrackHandlerPayload;
-    expect(
-      getTimestamp(ARRIVED_AT, getUserDefinedTimestamp(body)).timestamp
-    ).toBe(Date.parse(at));
-  });
-
-  it('a legacy body that looks like an ai payload still back-dates by properties', () => {
+  it('legacy body properties still back-dates by properties', () => {
     const at = '2024-01-15T10:30:00.000Z';
     const legacyBody = {
       kind: 'span',
@@ -213,47 +197,6 @@ describe('getOverrideDeviceId', () => {
   });
 });
 
-const chunk = (): IReplayPayload => ({
-  chunk_index: 0,
-  events_count: 1,
-  is_full_snapshot: true,
-  started_at: '2026-06-08T12:00:00.000Z',
-  ended_at: '2026-06-08T12:00:01.000Z',
-  payload: '[]',
-});
-
-describe('handleReplay', () => {
-  it('files the chunk under the session id provided by the caller', async () => {
-    const add = mock((_row: Record<string, unknown>) => Promise.resolve());
-
-    const failure = await handleReplay(
-      chunk(),
-      { projectId: 'proj-1', sessionId: 'sess-issued-123' },
-      { add } as unknown as Buffers['replay']
-    );
-
-    expect(failure).toBeNull();
-    expect(add).toHaveBeenCalledTimes(1);
-    expect(add.mock.calls[0]?.[0]).toMatchObject({
-      project_id: 'proj-1',
-      session_id: 'sess-issued-123',
-    });
-  });
-
-  it('refuses the chunk when the session id is missing', async () => {
-    const add = mock(async () => undefined);
-
-    const failure = await handleReplay(
-      chunk(),
-      { projectId: 'proj-1', sessionId: undefined },
-      { add } as unknown as Buffers['replay']
-    );
-
-    expect(failure).toEqual({ status: 'replay-missing-session-id' });
-    expect(add).not.toHaveBeenCalled();
-  });
-});
-
 const PROJECT_ID = 'proj-kafka';
 const DEVICE_ID = 'device-kafka-1';
 
@@ -267,7 +210,6 @@ const transport = (
   ({
     buffers: {
       session: { getExistingSessions },
-      replay: { add: mock(async () => undefined) },
       group: { add: mock(async () => undefined) },
     },
     produceIncomingEvent,

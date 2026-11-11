@@ -58,23 +58,6 @@ export const getProjectByIdCached = cacheablePerDb(
   DAY_IN_SECONDS
 );
 
-/**
- * Whether a project keeps AI prompts and completions. Redis only, no
- * in-process copy: an opt-out must reach every ingest process at once.
- */
-export const getProjectAiStoreContentCached = cacheablePerDb(
-  'getProjectAiStoreContent',
-  async (deps: DbScope, id: string): Promise<boolean | null> => {
-    const project = await deps.db.project.findUnique({
-      where: { id },
-      select: { aiStoreContent: true },
-    });
-    return project?.aiStoreContent ?? null;
-  },
-  DAY_IN_SECONDS,
-  { localCache: false }
-);
-
 export async function getProjectWithClients(deps: ServiceDeps, id: string) {
   const res = await deps.db.project.findUnique({
     where: {
@@ -383,7 +366,6 @@ export function createProjectService(
       cors?: string[];
       crossDomain?: boolean;
       allowUnsafeRevenueTracking?: boolean;
-      aiStoreContent?: boolean;
       filters?: IProjectFilters[];
     }
   ): Promise<IServiceProject | null> {
@@ -414,9 +396,6 @@ export function createProjectService(
     if (input.allowUnsafeRevenueTracking !== undefined) {
       updateData.allowUnsafeRevenueTracking = input.allowUnsafeRevenueTracking;
     }
-    if (input.aiStoreContent !== undefined) {
-      updateData.aiStoreContent = input.aiStoreContent;
-    }
     if (input.filters !== undefined) {
       updateData.filters = input.filters;
     }
@@ -428,7 +407,6 @@ export function createProjectService(
 
     await Promise.all([
       getProjectByIdCached.clear(deps, project.id),
-      getProjectAiStoreContentCached.clear(deps, project.id),
       ...existing.clients.map((client) =>
         getClientByIdCached.clear(deps, client.id)
       ),

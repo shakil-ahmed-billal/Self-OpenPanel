@@ -18,10 +18,7 @@ import type { Logger } from '../../logger';
 import type { ServiceDeps, Services } from '../../services';
 import { headerValue, type IngestHeaders } from '../../shared/headers';
 import { generateDeviceId } from '../../shared/profileId';
-import type { IAiPayload } from '../ai/ai.constants';
-import { normalizeAiPayload } from '../ai/ai.service';
 import { createBotEvent } from '../event/event.service';
-import { getOrganizationByProjectIdCached } from '../organization/organization.service';
 import {
   getProfileById,
   identifyProfile,
@@ -36,7 +33,6 @@ import {
   type IGroupPayload,
   type IIdentifyPayload,
   type IIncrementPayload,
-  type IReplayPayload,
   type ITrackHandlerPayload,
   type ITrackPayload,
   zLooseIdentifyPayload,
@@ -73,7 +69,7 @@ export type {
 } from './src/incoming-event';
 
 /** The buffers this module touches. A subset of `AppDeps.buffers`. */
-export type IngestBuffers = Pick<Buffers, 'session' | 'replay' | 'group'>;
+export type IngestBuffers = Pick<Buffers, 'session' | 'group'>;
 
 export interface IngestTransport {
   buffers: IngestBuffers;
@@ -106,7 +102,6 @@ const FIFTEEN_MINUTES_MS = 15 * ONE_MINUTE_MS;
  */
 const EARLIEST_ACCEPTED_TIMESTAMP_MS = Date.UTC(2000, 0, 1);
 const FALLBACK_USER_AGENT = 'unknown/1.0';
-const NO_DEVICE = { deviceId: '', sessionId: '' } as const;
 
 /** The whitelisted subset that ships with the queue payload. */
 export function getStringHeaders(
@@ -136,12 +131,6 @@ function getIdentity(body: ITrackHandlerPayload): IIdentifyPayload | undefined {
       : undefined;
   }
 
-  if (body.type === 'ai') {
-    return body.payload.profileId
-      ? { profileId: String(body.payload.profileId) }
-      : undefined;
-  }
-
   return undefined;
 }
 
@@ -160,9 +149,6 @@ function sanitizeOverrideDeviceId(raw: unknown): string | undefined {
 export function getOverrideDeviceId(
   body: ITrackHandlerPayload
 ): string | undefined {
-  if (body.type === 'ai') {
-    return sanitizeOverrideDeviceId(body.payload.deviceId);
-  }
   if (body.type !== 'track') {
     return undefined;
   }
@@ -187,9 +173,6 @@ export function getPropertyTimestamp(payload: unknown): unknown {
 
 /** The back-date a validated `/track` body carries, by its declared type. */
 export function getUserDefinedTimestamp(body: ITrackHandlerPayload): unknown {
-  if (body.type === 'ai') {
-    return body.payload.timestamp;
-  }
   return getPropertyTimestamp(body.payload);
 }
 
@@ -256,7 +239,6 @@ export type TrackOutcome =
   | { status: 'alias-not-supported' }
   | { status: 'invalid-type' }
   | { status: 'missing-project-id' }
-  | { status: 'replay-missing-session-id' }
   | { status: 'profile-not-found' }
   | { status: 'profile-property-not-a-number' };
 
@@ -296,22 +278,17 @@ async function buildContext(
     getSalts(deps),
   ]);
 
-  // The ip + user-agent hash identifies a browser; for an AI call it would
-  // only name the backend that made it, and show up as an anonymous user.
-  const isDeviceless = request.body.type === 'ai' && !overrideDeviceId;
-  const deviceIdResult = isDeviceless
-    ? NO_DEVICE
-    : await getDeviceId({
-        projectId,
-        ip,
-        ua,
-        salts,
-        overrideDeviceId,
-        eventTimeMs: timestamp.timestamp,
-        sessionBuffer: buffers.session,
-        sessionTimeoutMs,
-        logger: deps.logger,
-      });
+  const deviceIdResult = await getDeviceId({
+    projectId,
+    ip,
+    ua,
+    salts,
+    overrideDeviceId,
+    eventTimeMs: timestamp.timestamp,
+    sessionBuffer: buffers.session,
+    sessionTimeoutMs,
+    logger: deps.logger,
+  });
 
   return {
     projectId,
@@ -383,47 +360,6 @@ async function handleTrack(
   await Promise.all(promises);
 }
 
-/**
- * An AI event is a server event in all but name: no bot scoring, no session
- * of its own. It keys the partition on the profile so one user's trace stays
- * ordered, and ships the typed row draft next to the slim `events` payload.
- */
-async function handleAi(
-  payload: IAiPayload,
-  context: TrackContext,
-  transport: IngestTransport
-): Promise<void> {
-  const { projectId, deviceId, geo, headers, timestamp, sessionId } = context;
-  const normalized = normalizeAiPayload(payload);
-  const uaInfo = parseUserAgent(headers['user-agent'], undefined);
-  const profileId =
-    payload.profileId === undefined ? undefined : String(payload.profileId);
-
-  const queueData: IncomingEventPayload = {
-    id: uuid(),
-    projectId,
-    headers,
-    event: {
-      name: normalized.name,
-      properties: normalized.properties,
-      profileId,
-      groups: payload.groups ?? [],
-      timestamp: timestamp.value,
-      isTimestampFromThePast: timestamp.isFromPast,
-    },
-    uaInfo,
-    geo,
-    deviceId,
-    sessionId,
-    ai: normalized.draft,
-  };
-
-  const partitionKey = profileId
-    ? `${projectId}:${profileId}`
-    : deviceId || generateId();
-  await transport.produceIncomingEvent(queueData, partitionKey);
-}
-
 async function handleIdentify(
   deps: ServiceDeps,
   payload: IIdentifyPayload,
@@ -470,34 +406,6 @@ async function adjustProfileProperty(
     isExternal: true,
   });
 
-  return null;
-}
-
-/** Replay only needs the server-issued session id (the SDK echoes it back).
- *  Trust it — scoped to the authed project, unguessable, same trust level as
- *  event data. */
-export async function handleReplay(
-  payload: IReplayPayload,
-  {
-    projectId,
-    sessionId,
-  }: { projectId: string; sessionId: string | undefined },
-  replayBuffer: IngestBuffers['replay']
-): Promise<TrackOutcome | null> {
-  if (!sessionId) {
-    return { status: 'replay-missing-session-id' };
-  }
-
-  await replayBuffer.add({
-    project_id: projectId,
-    session_id: sessionId,
-    chunk_index: payload.chunk_index,
-    started_at: payload.started_at,
-    ended_at: payload.ended_at,
-    events_count: payload.events_count,
-    is_full_snapshot: payload.is_full_snapshot,
-    payload: payload.payload,
-  });
   return null;
 }
 
@@ -586,29 +494,11 @@ export async function ingestTrack(
       }
       break;
     }
-    case 'replay': {
-      // BACKCOMPAT(replay-sessionid): TEMPORARY legacy branch, remove when new SDK is fully deployed
-      const failure = await handleReplay(
-        body.payload,
-        {
-          projectId: context.projectId,
-          sessionId: body.payload.sessionId || context.sessionId,
-        },
-        transport.buffers.replay
-      );
-      if (failure) {
-        return failure;
-      }
-      break;
-    }
     case 'group':
       await handleGroup(body.payload, context, transport.buffers.group);
       break;
     case 'assign_group':
       await handleAssignGroup(transport.deps, body.payload, context);
-      break;
-    case 'ai':
-      await handleAi(body.payload, context, transport);
       break;
     default:
       return { status: 'invalid-type' };
@@ -622,77 +512,13 @@ export async function ingestTrack(
 }
 
 /**
- * Two things worth knowing about the shape of this:
- *
- * It gates on `windDownStep`, not on `subscriptionState`. Every expired trial
- * is already in `trial_expired`, so gating on the state would block thousands
- * of orgs at once, skipping the four warning emails entirely.
- *
- * It answers 202, not 402 or 403 (the caller does; this returns the verdict).
- * The SDKs treat only 401 and 2xx as terminal, so a "correct" status code
- * would multiply traffic from exactly the clients we are trying to quiet down.
- */
-const WIND_DOWN_BLOCKED_STEPS = new Set(['blocked', 'final_warning']);
-
-export async function isIngestionWoundDown(
-  deps: ServiceDeps,
-  request: {
-    projectId: string | null | undefined;
-    selfHosted: boolean;
-    logger: Logger;
-  }
-): Promise<boolean> {
-  if (request.selfHosted || !request.projectId) {
-    return false;
-  }
-
-  const { projectId, logger } = request;
-
-  try {
-    // Cached for 5 minutes and invalidated by the Polar webhook, so paying
-    // again lifts the block on the next checkout rather than on a TTL.
-    const organization = await getOrganizationByProjectIdCached(
-      deps,
-      projectId
-    );
-
-    if (
-      !(
-        organization?.windDownStep &&
-        WIND_DOWN_BLOCKED_STEPS.has(organization.windDownStep)
-      )
-    ) {
-      return false;
-    }
-
-    logger.info(
-      {
-        organizationId: organization.id,
-        projectId,
-        windDownStep: organization.windDownStep,
-      },
-      'Ingestion blocked by wind-down'
-    );
-    return true;
-  } catch (error) {
-    // Fail open. Dropping a paying customer's events because Redis or Postgres
-    // hiccuped is far worse than letting a blocked org through for a tick.
-    logger.error(
-      { err: error, projectId },
-      'Wind-down check failed, allowing ingestion'
-    );
-    return false;
-  }
-}
-
-/**
  * `POST /event` — the legacy compat route, kept because production still has
  * projects posting to it.
  *
  * It is NOT `ingestTrack` with a different body: the legacy payload carries a
  * client-supplied ISO `timestamp`, has no `type` discriminator, no schema, and
- * no identify/increment/replay branches, so it builds its own queue payload
- * and mints the event id at the producer like `/track` does.
+ * no identify/increment branches, so it builds its own queue payload and mints
+ * the event id at the producer like `/track` does.
  */
 export type LegacyEventOutcome =
   | { status: 'ok' }
@@ -897,8 +723,7 @@ export async function isDuplicateIngestRequest(request: {
   const ip = request.clientIp;
   const origin = headerValue(request.headers, 'origin');
   const clientId = headerValue(request.headers, 'openpanel-client-id');
-  const isReplay = isTrackBody(request) && request.body.type === 'replay';
-  const shouldCheck = ip && origin && clientId && !isReplay;
+  const shouldCheck = ip && origin && clientId;
 
   if (!shouldCheck) {
     return false;

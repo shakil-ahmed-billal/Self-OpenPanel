@@ -485,40 +485,21 @@ export async function sendWeeklyDigests(
 ): Promise<WeeklyDigestResult> {
   const db = deps.db;
 
-  // Prefilter on the raw status column (computed fields can't be used in
-  // `where`), then refine with the canonical subscription state below.
   const projects = await db.project.findMany({
     where: {
       deleteAt: null,
       eventsCount: { gt: WEEKLY_DIGEST_MIN_EVENTS },
-      ...(deps.config.selfHosted
-        ? {}
-        : {
-            organization: {
-              subscriptionStatus: { in: ['active', 'trialing'] },
-            },
-          }),
     },
     select: {
       id: true,
       name: true,
       organizationId: true,
-      organization: { select: { subscriptionState: true } },
     },
   });
 
   let sent = 0;
   for (const project of projects) {
     try {
-      const state = project.organization.subscriptionState;
-      if (
-        !deps.config.selfHosted &&
-        state !== 'active' &&
-        state !== 'trialing'
-      ) {
-        continue;
-      }
-
       const { skipped, data } = await buildDigestData(deps, project);
       if (skipped || !data) {
         continue;

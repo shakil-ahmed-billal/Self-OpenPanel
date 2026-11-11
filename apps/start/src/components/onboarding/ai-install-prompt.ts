@@ -39,11 +39,7 @@ const PACKAGES_BY_TYPE: Record<ProjectType, string[]> = {
     'React, Vue, Svelte, Remix or any other browser app: @openpanel/web (one shared `new OpenPanel({ clientId })` instance)',
     'Plain HTML or no build step: the script tag at the end of this prompt',
   ],
-  app: [
-    'React Native / Expo: @openpanel/react-native plus expo-application and expo-constants',
-    'iOS: Swift package https://github.com/Openpanel-dev/swift-sdk',
-    'Android: dev.openpanel:openpanel',
-  ],
+  app: [`POST to the track API (${TRACK_API_URL})`],
   backend: [
     'Node or Bun: @openpanel/sdk; Express: @openpanel/express (middleware)',
     'Python: pip install openpanel; Ruby: gem openpanel-sdk; Rust: cargo add openpanel-sdk',

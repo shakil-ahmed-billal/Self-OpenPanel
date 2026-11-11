@@ -12,13 +12,9 @@ import {
   type TrpcContext,
 } from '../../rpc/base';
 import { TRPCForbiddenError } from '../../rpc/errors';
-import type { ServiceDeps } from '../../services';
 import { getConversionEventNames } from '../event/event.service';
 import { getReferrerSpikes } from '../insight/insight.service';
-import {
-  getOrganizationSubscriptionChartEndDate,
-  getSettingsForProject,
-} from '../organization/organization.service';
+import { getSettingsForProject } from '../organization/organization.service';
 import { type IChartRange, zRange } from '../report/report.constants';
 import { getChartStartEndDate } from '../report/src/chart-dates';
 import {
@@ -83,24 +79,6 @@ interface DateRange {
   endDate: string;
 }
 
-/** Ends a range at the organization's subscription cutoff, if it has one. */
-async function clampToSubscriptionEnd(
-  ctx: ServiceDeps,
-  projectId: string,
-  range: DateRange
-): Promise<DateRange> {
-  const endDate = await getOrganizationSubscriptionChartEndDate(
-    ctx,
-    projectId,
-    range.endDate
-  );
-  if (!endDate) {
-    return range;
-  }
-  const startsAfterCutoff = new Date(range.startDate) > new Date(endDate);
-  return { startDate: startsAfterCutoff ? endDate : range.startDate, endDate };
-}
-
 function getCurrentAndPrevious<
   T extends {
     startDate?: string | null;
@@ -108,7 +86,7 @@ function getCurrentAndPrevious<
     range: IChartRange;
     projectId: string;
   },
->(input: T, fetchPrevious: boolean, timezone: string, ctx: ServiceDeps) {
+>(input: T, fetchPrevious: boolean, timezone: string) {
   const current = getChartStartEndDate(input, timezone);
   const previous = getChartPrevStartEndDate(current);
 
@@ -118,17 +96,9 @@ function getCurrentAndPrevious<
     current: R;
     previous: R | null;
   }> => {
-    // Both ranges are clamped: after an expired trial the previous period can
-    // still end past the cutoff.
-    const [currentRange, previousRange] = await Promise.all([
-      clampToSubscriptionEnd(ctx, input.projectId, current),
-      fetchPrevious
-        ? clampToSubscriptionEnd(ctx, input.projectId, previous)
-        : null,
-    ]);
     const res = await Promise.all([
-      fn({ ...input, ...currentRange }),
-      previousRange ? fn({ ...input, ...previousRange }) : null,
+      fn({ ...input, ...current }),
+      fetchPrevious ? fn({ ...input, ...previous }) : null,
     ]);
 
     return {
@@ -179,8 +149,7 @@ export const overviewRouter = createTRPCRouter({
       const { current, previous } = await getCurrentAndPrevious(
         { ...input, timezone },
         true,
-        timezone,
-        ctx
+        timezone
       )(ctx.services.overview.getMetrics);
       return {
         metrics: {
@@ -259,8 +228,7 @@ export const overviewRouter = createTRPCRouter({
       const { current } = await getCurrentAndPrevious(
         { ...input },
         false,
-        timezone,
-        ctx
+        timezone
       )(async (input) => {
         if (input.mode === 'page') {
           return ctx.services.overview.getTopPages({ ...input, timezone });
@@ -294,8 +262,7 @@ export const overviewRouter = createTRPCRouter({
       const { current } = await getCurrentAndPrevious(
         { ...input, timezone },
         false,
-        timezone,
-        ctx
+        timezone
       )(ctx.services.overview.getTopGeneric);
 
       return current;
@@ -317,8 +284,7 @@ export const overviewRouter = createTRPCRouter({
       const { current } = await getCurrentAndPrevious(
         { ...input, timezone },
         false,
-        timezone,
-        ctx
+        timezone
       )(ctx.services.overview.getTopGenericSeries);
 
       return current;
@@ -339,8 +305,7 @@ export const overviewRouter = createTRPCRouter({
       const { current } = await getCurrentAndPrevious(
         { ...input, timezone },
         false,
-        timezone,
-        ctx
+        timezone
       )(async (input) => {
         return ctx.services.overview.getUserJourney({
           ...input,
@@ -366,8 +331,7 @@ export const overviewRouter = createTRPCRouter({
       const { current } = await getCurrentAndPrevious(
         { ...input, timezone },
         false,
-        timezone,
-        ctx
+        timezone
       )(ctx.services.overview.getTopEvents);
 
       return current;
@@ -398,8 +362,7 @@ export const overviewRouter = createTRPCRouter({
       const { current } = await getCurrentAndPrevious(
         { ...input, timezone },
         false,
-        timezone,
-        ctx
+        timezone
       )(ctx.services.overview.getTopLinkOut);
 
       return current;
@@ -449,8 +412,7 @@ export const overviewRouter = createTRPCRouter({
       const { current } = await getCurrentAndPrevious(
         { ...input, timezone },
         false,
-        timezone,
-        ctx
+        timezone
       )(ctx.services.overview.getMapData);
 
       return current;

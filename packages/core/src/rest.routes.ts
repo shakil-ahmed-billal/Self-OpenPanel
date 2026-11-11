@@ -13,16 +13,12 @@ import { manageDashboardRoutes } from './modules/dashboard/dashboard.routes';
 import { exportRoutes, insightsRoutes } from './modules/export/export.routes';
 import { gscRoutes } from './modules/gsc/gsc.routes';
 import { healthRoutes } from './modules/health/health.routes';
-import { importRoutes } from './modules/import/import.routes';
 import { ingestRoutes } from './modules/ingest/ingest.routes';
-import { integrationRoutes } from './modules/integration/integration.routes';
 import { mcpRoutes } from './modules/mcp/mcp.routes';
 import { miscRoutes } from './modules/misc/misc.routes';
 import { profileRoutes } from './modules/profile/profile.routes';
 import { projectRoutes } from './modules/project/project.routes';
 import { realtimeRoutes } from './modules/realtime/realtime.routes';
-import { referenceRoutes } from './modules/reference/reference.routes';
-import { subscriptionRoutes } from './modules/subscription/subscription.routes';
 import { toolsRoutes } from './modules/tools/tools.routes';
 
 // Pinned to the @elysiajs/openapi 1.4.15 fallback; 2.0 is not viable here.
@@ -47,10 +43,8 @@ export const publicApiRoutes = (deps: AppDeps) =>
     // the limit. The prefix table is in http/rate-limit.ts.
     .use(httpRateLimit(deps))
     .use(ingestRoutes(deps))
-    .use(importRoutes(deps))
     .use(projectRoutes(deps))
     .use(clientRoutes(deps))
-    .use(referenceRoutes(deps))
     .use(manageDashboardRoutes(deps))
     .use(profileRoutes(deps))
     .use(exportRoutes(deps))
@@ -67,8 +61,6 @@ export const dashboardRoutes = (deps: AppDeps) =>
     .use(assistantRoutes(deps))
     .use(mcpRoutes(deps))
     .use(authRoutes(deps))
-    .use(integrationRoutes(deps))
-    .use(subscriptionRoutes(deps))
     .use(realtimeRoutes(deps))
     .use(miscRoutes(deps));
 

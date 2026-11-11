@@ -50,11 +50,6 @@ const DOCUMENTED_MANAGE_ROUTES = [
   ['POST', '/manage/clients'],
   ['PATCH', '/manage/clients/c1'],
   ['DELETE', '/manage/clients/c1'],
-  ['GET', '/manage/references'],
-  ['GET', '/manage/references/r1'],
-  ['POST', '/manage/references'],
-  ['PATCH', '/manage/references/r1'],
-  ['DELETE', '/manage/references/r1'],
   ['GET', '/manage/projects/p1/dashboards'],
   ['GET', '/manage/projects/p1/dashboards/d1/reports'],
 ] as const;

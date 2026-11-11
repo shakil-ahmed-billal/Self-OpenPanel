@@ -79,8 +79,6 @@ export const legacyCompat = {
     return typeof type === 'string' ? { job: type, payload: null } : undefined;
   }) satisfies CompatHook,
 
-  notification: discriminatedByType(['sendNotification']),
-  import: discriminatedByType(['import']),
   insights: discriminatedByType(['insightsProject']),
   gsc: discriminatedByType(['gscProjectSync', 'gscProjectBackfill']),
 

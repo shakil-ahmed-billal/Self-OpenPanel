@@ -7,7 +7,7 @@ import { hostname } from 'node:os';
 
 const DEFAULT_TOP_OBJECT_TYPES = 25;
 
-// `apps/start`, `@openpanel/email` and `@openpanel/redis` typecheck this source
+// `apps/start` and `@openpanel/redis` typecheck this source
 // without Bun's types, so the runtime is typed here and `bun:jsc` is imported
 // by a specifier TypeScript does not resolve.
 const BUN_JSC_MODULE = 'bun:jsc';

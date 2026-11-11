@@ -6,11 +6,7 @@
 import { z } from 'zod';
 import { createTRPCRouter, protectedProcedure } from '../../rpc/base';
 import { zChartEventFilter } from '../report/report.constants';
-import {
-  getSessionById,
-  getSessionList,
-  getSessionReplayChunksFrom,
-} from './session.service';
+import { getSessionById, getSessionList } from './session.service';
 
 const DEFAULT_LIST_TAKE = 50;
 /** A list page, not an export. `/export/events` is the bulk path. */
@@ -58,28 +54,5 @@ export const sessionRouter = createTRPCRouter({
       });
 
       return getSessionById(ctx, input.sessionId, input.projectId);
-    }),
-
-  replayChunksFrom: protectedProcedure
-    .input(
-      z.object({
-        sessionId: z.string(),
-        projectId: z.string(),
-        fromIndex: z.number().int().min(0).default(0),
-      })
-    )
-    .query(async ({ input, ctx }) => {
-      await ctx.services.auth.requireProjectAccess({
-        userId: ctx.session.userId,
-        projectId: input.projectId,
-        level: 'read',
-      });
-
-      return getSessionReplayChunksFrom(
-        ctx,
-        input.sessionId,
-        input.projectId,
-        input.fromIndex
-      );
     }),
 });

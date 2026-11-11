@@ -8,15 +8,7 @@ interface FakeOrganization {
   timezone: string | null;
   createdByUserId: string | null;
   deleteAt: Date | null;
-  subscriptionStatus: string | null;
-  subscriptionCurrentPeriodStart: Date | null;
-  subscriptionCurrentPeriodEnd: Date | null;
-  subscriptionEndsAt: Date | null;
-  subscriptionChartEndDate: Date | null;
   createdAt: Date;
-  // Prisma `$extends` computed fields, set directly on the fixture.
-  hasSubscription: boolean;
-  isWillBeCanceled: boolean;
 }
 
 interface FakeProject {
@@ -68,14 +60,7 @@ function makeOrganization(
     timezone: null,
     createdByUserId: null,
     deleteAt: null,
-    subscriptionStatus: null,
-    subscriptionCurrentPeriodStart: null,
-    subscriptionCurrentPeriodEnd: null,
-    subscriptionEndsAt: null,
-    subscriptionChartEndDate: null,
     createdAt: EPOCH,
-    hasSubscription: false,
-    isWillBeCanceled: false,
     ...overrides,
   };
 }
@@ -530,35 +515,6 @@ test('scheduleOrganizationDeletion sets deleteAt on the org and its projects', a
 
   expect(organizationStore.get('org_1')?.deleteAt).toBeInstanceOf(Date);
   expect(projectStore.get('proj_1')?.deleteAt).toBeInstanceOf(Date);
-});
-
-test('scheduleOrganizationDeletion refuses a live, uncancelled subscription', async () => {
-  organizationStore.set(
-    'org_1',
-    makeOrganization({
-      id: 'org_1',
-      hasSubscription: true,
-      isWillBeCanceled: false,
-    })
-  );
-
-  await expect(
-    subject.scheduleOrganizationDeletion(deps, 'org_1')
-  ).rejects.toThrow(/cancel your subscription/);
-});
-
-test('scheduleOrganizationDeletion allows a subscription already scheduled to cancel', async () => {
-  organizationStore.set(
-    'org_1',
-    makeOrganization({
-      id: 'org_1',
-      hasSubscription: true,
-      isWillBeCanceled: true,
-    })
-  );
-
-  await subject.scheduleOrganizationDeletion(deps, 'org_1');
-  expect(organizationStore.get('org_1')?.deleteAt).toBeInstanceOf(Date);
 });
 
 test('cancelOrganizationDeletion clears deleteAt on the org and its projects', async () => {
@@ -1048,16 +1004,14 @@ test('runDeleteCron sweeps orphaned and scheduled-for-deletion organizations and
     makeOrganization({ id: 'org_orphaned' })
   );
   organizationStore.set(
-    'org_paying',
+    'org_active',
     makeOrganization({
-      id: 'org_paying',
-      hasSubscription: true,
-      isWillBeCanceled: false,
+      id: 'org_active',
     })
   );
-  memberStore.set('member_paying_admin', {
-    id: 'member_paying_admin',
-    organizationId: 'org_paying',
+  memberStore.set('member_active_admin', {
+    id: 'member_active_admin',
+    organizationId: 'org_active',
     userId: 'user_1',
     role: 'admin',
     email: 'a@example.com',
@@ -1069,7 +1023,7 @@ test('runDeleteCron sweeps orphaned and scheduled-for-deletion organizations and
   });
   projectStore.set('proj_scheduled', {
     id: 'proj_scheduled',
-    organizationId: 'org_paying',
+    organizationId: 'org_active',
     deleteAt: new Date(Date.now() - 1000),
   });
 
@@ -1077,7 +1031,7 @@ test('runDeleteCron sweeps orphaned and scheduled-for-deletion organizations and
 
   expect(result).toEqual({ organizations: 1, projects: 2 });
   expect(organizationStore.has('org_orphaned')).toBe(false);
-  expect(organizationStore.has('org_paying')).toBe(true);
+  expect(organizationStore.has('org_active')).toBe(true);
   expect(projectStore.has('proj_orphaned')).toBe(false);
   expect(projectStore.has('proj_scheduled')).toBe(false);
   expect(chCommand).toHaveBeenCalled();

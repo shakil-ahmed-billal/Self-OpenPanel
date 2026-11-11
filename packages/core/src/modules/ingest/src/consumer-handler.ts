@@ -11,7 +11,6 @@ import { resolveRequestId } from '../../../shared/request-id';
 import type { IncomingEventPayload } from './incoming-event';
 import {
   createIncomingEventDeps,
-  type IncomingEventBindings,
   type IncomingEventDelivery,
   incomingEvent,
 } from './incoming-event-handler';
@@ -21,10 +20,7 @@ export function incomingEventRequestId(payload: IncomingEventPayload): string {
 }
 
 /** The consumer's `handleEvent` (`EventsBatchHandlerDeps.handleEvent`). */
-export function createIncomingEventHandler(
-  deps: AppDeps,
-  bindings: IncomingEventBindings
-) {
+export function createIncomingEventHandler(deps: AppDeps) {
   // Every event this handler buffers is produced again by a redelivery when
   // the batch's durability gate fails, so the event buffer must not keep a
   // re-queued copy of it too — `EventBuffer.addRedeliverable`. `createEvent()`
@@ -42,6 +38,6 @@ export function createIncomingEventHandler(
       requestId,
       logger: deps.logger.child({ [REQUEST_ID_LOG_FIELD]: requestId }),
     });
-    return incomingEvent(payload, createIncomingEventDeps(ctx, bindings), meta);
+    return incomingEvent(payload, createIncomingEventDeps(ctx), meta);
   };
 }

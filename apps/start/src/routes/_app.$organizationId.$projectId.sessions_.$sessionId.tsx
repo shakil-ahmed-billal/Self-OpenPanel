@@ -7,10 +7,8 @@ import {
   ClockIcon,
   CopyIcon,
   Loader2Icon,
-  VideoIcon,
 } from 'lucide-react';
 import { useMemo } from 'react';
-import { AiUsageWidget } from '@/components/ai/ai-usage-widget';
 import FullPageLoadingState from '@/components/full-page-loading-state';
 import { PageContainer } from '@/components/page-container';
 import { PageHeader } from '@/components/page-header';
@@ -22,7 +20,6 @@ import { SessionMetrics } from '@/components/sessions/details/session-metrics';
 import { groupEventsByPage } from '@/components/sessions/details/session-pages';
 import { SessionProperties } from '@/components/sessions/details/session-properties';
 import { SessionTimeline } from '@/components/sessions/details/session-timeline';
-import { ReplayShell } from '@/components/sessions/replay';
 import {
   MAX_SESSION_EVENTS,
   type SessionEventsStatus,
@@ -129,7 +126,7 @@ function SessionFacts({ session }: { session: IServiceSession }) {
 
 // Everything below is built from the loaded events, except the metric totals.
 const EVENT_DERIVED_SECTIONS =
-  'the journey, timeline, unique pages, popular events and replay activity';
+  'the journey, timeline, unique pages and popular events';
 
 function SessionEventsNotice({
   status,
@@ -301,28 +298,13 @@ function Component() {
     <PageContainer className="col gap-6">
       <PageHeader
         actions={
-          <>
-            {session.hasReplay && (
-              <Button
-                icon={VideoIcon}
-                onClick={() =>
-                  document
-                    .getElementById('replay')
-                    ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                }
-                variant="outline"
-              >
-                Watch replay
-              </Button>
-            )}
-            <Button
-              icon={CopyIcon}
-              onClick={() => clipboard(session.id, 'Session id copied')}
-              variant="outline"
-            >
-              Copy id
-            </Button>
-          </>
+          <Button
+            icon={CopyIcon}
+            onClick={() => clipboard(session.id, 'Session id copied')}
+            variant="outline"
+          >
+            Copy id
+          </Button>
         }
         title={
           <div className="row min-w-0 items-center gap-4">
@@ -341,14 +323,6 @@ function Component() {
 
       <SessionMetrics events={events} session={session} />
 
-      {session.hasReplay && (
-        <ReplayShell
-          events={events}
-          projectId={projectId}
-          sessionId={sessionId}
-        />
-      )}
-
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
         <aside className="col gap-6">
           <VisitorCard
@@ -361,11 +335,6 @@ function Component() {
           <SessionGroups
             groupIds={session.groups ?? []}
             organizationId={organizationId}
-            projectId={projectId}
-          />
-          <AiUsageWidget
-            className="w-full"
-            entity={{ kind: 'session', sessionId }}
             projectId={projectId}
           />
           {eventCounts.length > 0 && <MostEvents data={eventCounts} />}

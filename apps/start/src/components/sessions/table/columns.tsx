@@ -1,7 +1,6 @@
 import type { IServiceSession } from '@openpanel/core';
 import { round } from '@openpanel/shared';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Video } from 'lucide-react';
 import { ColumnCreatedAt } from '@/components/column-created-at';
 import { ProjectLink } from '@/components/links';
 import { ProfileAvatar } from '@/components/profiles/profile-avatar';
@@ -54,18 +53,6 @@ export function useColumns() {
             >
               {session.id.slice(0, 8)}...
             </ProjectLink>
-            {session.hasReplay && (
-              <ProjectLink
-                aria-label="View replay"
-                className="text-muted-foreground hover:text-foreground"
-                hash="replay"
-                params={{ sessionId: session.id }}
-                title="View replay"
-                to="/sessions/$sessionId"
-              >
-                <Video className="size-4" />
-              </ProjectLink>
-            )}
           </div>
         );
       },

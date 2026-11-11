@@ -6,4 +6,4 @@
  * An explicit list rather than a glob, so a new package does not silently
  * join the vitest side of the split.
  */
-export default ['packages/redis', 'packages/payments'];
+export default ['packages/redis'];

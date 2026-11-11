@@ -4,18 +4,11 @@
 
 import { z } from 'zod';
 import { createTRPCRouter, protectedProcedure } from '../../rpc/base';
+import { zIntegrationConfig } from './integration.constants';
 import {
-  zCreateGCSExportIntegration,
-  zCreateS3ExportIntegration,
-  zCreateSlackIntegration,
-  zIntegrationConfig,
-} from './integration.constants';
-import {
-  createOrUpdateSlackIntegration,
   deleteIntegration,
   getIntegrationById,
   listIntegrationsForProject,
-  testExportIntegrationConnection,
   testIntegrationConnection,
   upsertIntegration,
 } from './integration.service';
@@ -33,12 +26,6 @@ export const integrationRouter = createTRPCRouter({
       listIntegrationsForProject(ctx, ctx.session.userId, input.projectId)
     ),
 
-  createOrUpdateSlack: protectedProcedure
-    .input(zCreateSlackIntegration)
-    .mutation(({ input, ctx }) =>
-      createOrUpdateSlackIntegration(ctx, ctx.session.userId, input)
-    ),
-
   createOrUpdate: protectedProcedure
     .input(
       z.object({
@@ -52,14 +39,6 @@ export const integrationRouter = createTRPCRouter({
       upsertIntegration(ctx, ctx.session.userId, input)
     ),
 
-  // Back-compat alias for the export forms; delegates to the same generic path.
-  // TODO: remove once the dashboard calls `createOrUpdate` directly.
-  createOrUpdateExport: protectedProcedure
-    .input(z.union([zCreateS3ExportIntegration, zCreateGCSExportIntegration]))
-    .mutation(({ input, ctx }) =>
-      upsertIntegration(ctx, ctx.session.userId, input)
-    ),
-
   testConnection: protectedProcedure
     .input(
       z.object({
@@ -69,14 +48,6 @@ export const integrationRouter = createTRPCRouter({
     )
     .mutation(({ input, ctx }) =>
       testIntegrationConnection(ctx, ctx.session.userId, input)
-    ),
-
-  // Back-compat alias for the export forms; same gate as `testConnection`.
-  // TODO: remove once the dashboard calls `testConnection` directly.
-  testExportConnection: protectedProcedure
-    .input(z.union([zCreateS3ExportIntegration, zCreateGCSExportIntegration]))
-    .mutation(({ input, ctx }) =>
-      testExportIntegrationConnection(ctx, ctx.session.userId, input)
     ),
 
   delete: protectedProcedure

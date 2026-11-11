@@ -35,7 +35,6 @@ function stubJobCtx(
     integration: {} as Services['integration'],
     cohort: {} as Services['cohort'],
     gsc: {} as Services['gsc'],
-    import: {} as Services['import'],
     ingest: {} as Services['ingest'],
     organization: {} as Services['organization'],
     onboarding: {} as Services['onboarding'],
@@ -61,12 +60,10 @@ function stubJobCtx(
     client: {} as Services['client'],
     project: {} as Services['project'],
     user: {} as Services['user'],
-    subscription: {} as Services['subscription'],
     salt: {} as Services['salt'],
     conversation: {} as Services['conversation'],
     assistant: {} as Services['assistant'],
     mcp: {} as Services['mcp'],
-    ai: {} as Services['ai'],
   };
   return {
     auth: null,

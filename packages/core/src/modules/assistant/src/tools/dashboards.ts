@@ -72,29 +72,6 @@ export function dashboardTools(ctx: ChatToolContext) {
       },
     }),
 
-    create_reference: tool({
-      description:
-        'Add a reference: an annotation on a date that shows on every chart (launch, campaign, deploy, outage). Asks the user to confirm.',
-      inputSchema: z.object({
-        title: z.string().min(1),
-        description: z.string().optional(),
-        date: z.string().describe('ISO date or datetime.'),
-      }),
-      execute: async ({ title, description, date }) => {
-        const reference = await actions.reference.create({
-          projectId,
-          title,
-          description: description ?? null,
-          datetime: new Date(date).toISOString(),
-        });
-        return {
-          id: reference.id,
-          title: reference.title,
-          url: dashboardUrl(ctx, '/references'),
-        };
-      },
-    }),
-
     invite_member: tool({
       description:
         'Invite a teammate to the workspace by email with access to all projects. Asks the user to confirm.',

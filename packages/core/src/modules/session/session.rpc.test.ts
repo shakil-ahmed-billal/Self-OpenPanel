@@ -53,21 +53,3 @@ test('byId rejects an unauthenticated caller before querying ClickHouse', async 
     caller.byId({ projectId: 'proj_1', sessionId: 'sess_1' })
   ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
 });
-
-test('replayChunksFrom rejects an unauthenticated caller before querying ClickHouse', async () => {
-  const caller = await anonCaller();
-  await expect(
-    caller.replayChunksFrom({ projectId: 'proj_1', sessionId: 'sess_1' })
-  ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
-});
-
-test('replayChunksFrom rejects a negative fromIndex at the input boundary', async () => {
-  const caller = await memberCaller();
-  await expect(
-    caller.replayChunksFrom({
-      projectId: 'proj_1',
-      sessionId: 'sess_1',
-      fromIndex: -1,
-    })
-  ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
-});

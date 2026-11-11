@@ -1,4 +1,4 @@
-// Account deletion, profile updates and the deletion-blockers check.
+// Account deletion and profile updates.
 //
 // `protectedProcedure` runs `enforceUserIsAuthed` + `enforceAccess` BEFORE the
 // input parser. The explicit checks in the handlers below stay: `enforceAccess`
@@ -10,11 +10,6 @@ import { createTRPCRouter, protectedProcedure } from '../../rpc/base';
 import { MAX_NAME } from '../../shared/limits.constants';
 
 export const userRouter = createTRPCRouter({
-  deletionBlockers: protectedProcedure.query(async ({ ctx }) => {
-    const userId = ctx.session.userId;
-    return ctx.services.user.listUserDeletionBlockers(userId);
-  }),
-
   delete: protectedProcedure.mutation(async ({ ctx }) => {
     const userId = ctx.session.userId;
     await ctx.services.user.deleteUserAccount(userId);

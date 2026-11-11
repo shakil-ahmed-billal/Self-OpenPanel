@@ -2,11 +2,8 @@ import {
   type IIntegrationType,
   INTEGRATION_DESCRIPTORS,
 } from '@openpanel/core/modules/integration/integration.constants';
-import { BoxIcon, CloudIcon, DatabaseIcon, WebhookIcon } from 'lucide-react';
+import { BoxIcon, WebhookIcon } from 'lucide-react';
 import { DiscordIntegrationForm } from './forms/discord-integration';
-import { GCSExportIntegrationForm } from './forms/gcs-export-integration';
-import { S3ExportIntegrationForm } from './forms/s3-export-integration';
-import { SlackIntegrationForm } from './forms/slack-integration';
 import { WebhookIntegrationForm } from './forms/webhook-integration';
 import {
   IntegrationCardLogo,
@@ -42,16 +39,6 @@ const placeholderIcon = (
  */
 export const CLIENT_INTEGRATIONS: Record<IIntegrationType, IClientIntegration> =
   {
-    slack: {
-      type: 'slack',
-      icon: (
-        <IntegrationCardLogoImage
-          backgroundColor="#481449"
-          src="/logos/slack.png"
-        />
-      ),
-      Form: SlackIntegrationForm,
-    },
     discord: {
       type: 'discord',
       icon: (
@@ -74,24 +61,6 @@ export const CLIENT_INTEGRATIONS: Record<IIntegrationType, IClientIntegration> =
     },
     app: { type: 'app', icon: placeholderIcon },
     email: { type: 'email', icon: placeholderIcon },
-    s3_export: {
-      type: 's3_export',
-      icon: (
-        <IntegrationCardLogo className="bg-[#FF9900] text-white">
-          <CloudIcon className="size-10" />
-        </IntegrationCardLogo>
-      ),
-      Form: S3ExportIntegrationForm,
-    },
-    gcs_export: {
-      type: 'gcs_export',
-      icon: (
-        <IntegrationCardLogo className="bg-[#4285F4] text-white">
-          <DatabaseIcon className="size-10" />
-        </IntegrationCardLogo>
-      ),
-      Form: GCSExportIntegrationForm,
-    },
   };
 
 export interface IIntegrationCatalogEntry {

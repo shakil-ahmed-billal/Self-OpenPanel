@@ -25,13 +25,6 @@ async function anonCaller() {
   return userRouter.createCaller(trpcCtx);
 }
 
-test('deletionBlockers rejects an unauthenticated caller', async () => {
-  const caller = await anonCaller();
-  await expect(caller.deletionBlockers()).rejects.toMatchObject({
-    code: 'UNAUTHORIZED',
-  });
-});
-
 test('delete rejects an unauthenticated caller before touching the account', async () => {
   const caller = await anonCaller();
   await expect(caller.delete()).rejects.toMatchObject({

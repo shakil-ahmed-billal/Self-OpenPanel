@@ -53,9 +53,6 @@ export function createInsightStore(deps: ServiceDeps): InsightStore {
           deleteAt: null,
           eventsCount: { gt: 10_000 },
           updatedAt: { gt: new Date(Date.now() - 1000 * 60 * 60 * 24) },
-          ...(deps.config.selfHosted
-            ? {}
-            : { organization: { subscriptionStatus: 'active' } }),
         },
         select: { id: true },
       });

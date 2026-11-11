@@ -15,7 +15,6 @@ function Component() {
   const { organizationId } = Route.useParams();
   const { activeTab, tabs } = usePageTabs([
     { id: 'account', label: 'Profile' },
-    { id: 'email-preferences', label: 'Email preferences' },
     { id: 'two-factor', label: 'Two-factor auth' },
   ]);
 

@@ -31,11 +31,6 @@ export interface DataHealthProject {
   organizationId: string;
   noDataNotifiedAt: Date | null;
   dataStoppedNotifiedAt: Date | null;
-  organization: {
-    id: string;
-    subscriptionState: string;
-    onboarding: string | null;
-  };
 }
 
 export interface DataHealthMember {
@@ -135,12 +130,9 @@ export async function runDataHealthCron(
   const now = Date.now();
   const lastEventByProject = await deps.getLastEventPerProject();
 
-  // Prefilter on the raw status column (computed fields can't be used in
-  // `where`), then refine with the canonical subscription state below.
   const projects = await deps.db.project.findMany({
     where: {
       deleteAt: null,
-      organization: { subscriptionStatus: { in: ['active', 'trialing'] } },
     },
     select: {
       id: true,
@@ -149,30 +141,17 @@ export async function runDataHealthCron(
       organizationId: true,
       noDataNotifiedAt: true,
       dataStoppedNotifiedAt: true,
-      organization: {
-        select: { id: true, subscriptionState: true, onboarding: true },
-      },
     },
   });
 
   const byOrg = new Map<string, OrgAlert>();
 
   for (const project of projects) {
-    const state = project.organization.subscriptionState;
-    if (state !== 'active' && state !== 'trialing') {
-      continue;
-    }
-
     const lastEventAt = lastEventByProject.get(project.id);
 
     if (!lastEventAt) {
-      // Never received an event. One notice per project, after the grace
-      // period. Orgs still in the onboarding email drip are excluded — its
-      // day-2/6 emails already carry "stuck on the install?" variants, so this
-      // notice targets post-onboarding orgs and additional projects.
-      const inOnboardingDrip = project.organization.onboarding !== 'completed';
       const oldEnough = now - project.createdAt.getTime() > NO_DATA_AFTER_MS;
-      if (oldEnough && !project.noDataNotifiedAt && !inOnboardingDrip) {
+      if (oldEnough && !project.noDataNotifiedAt) {
         const entry = byOrg.get(project.organizationId) ?? {
           organizationId: project.organizationId,
           noData: [],

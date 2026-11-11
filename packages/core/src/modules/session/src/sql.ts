@@ -2,10 +2,9 @@
 // DateTime64 position is parsed exactly like the literal it replaces, so result
 // sets cannot drift by a millisecond truncation.
 //
-// `sessions` and `session_replay_chunks` are Distributed on Cloud. The has_replay
-// LEFT JOIN subquery and any `IN (SELECT...)` a filter compiles to run under the
-// client's `distributed_product_mode: 'allow'`; changing that shape changes the
-// query's cluster semantics.
+// Any `IN (SELECT...)` a filter compiles to runs under the client's
+// `distributed_product_mode: 'allow'`; changing that shape changes the query's
+// cluster semantics.
 
 import { type SqlFragment, sql } from '@openpanel/db/src/clickhouse/sql';
 import { toRangeBoundaryLiteral } from '../../../shared/ch-dates';
@@ -17,7 +16,6 @@ import {
 
 const TABLE = {
   sessions: 'sessions',
-  sessionReplayChunks: 'session_replay_chunks',
   events: 'events',
 } as const;
 
@@ -132,20 +130,14 @@ function sessionListWindow(query: SessionListQuery): SqlFragment {
 // the orphan +1 duplicates `FINAL` keeps. `GLOBAL` builds the −1 set once on
 // the initiator instead of once per shard.
 export function sessionListQuery(query: SessionListQuery): SqlFragment {
-  const { projectId, take, lookbackDays, profileId, search } = query;
+  const { take, profileId, search } = query;
   const { filterClauses = {} } = query;
 
   return sql`
     SELECT ${sql.join(
       SESSION_LIST_COLUMNS.map((column) => sql.id(column, SESSION_LIST_COLUMNS))
-    )}, toBool(src.session_id != '') as hasReplay
+    )}
     FROM ${sql.id(TABLE.sessions)}
-    LEFT JOIN (
-      SELECT DISTINCT session_id
-      FROM ${sql.id(TABLE.sessionReplayChunks)}
-      WHERE project_id = ${sql.string(projectId)}
-        AND started_at > now() - INTERVAL ${sql.float64(lookbackDays)} DAY
-    ) AS src ON src.session_id = id
     WHERE ${sessionListWindow(query)}
       AND sign = 1
       AND (id, version) GLOBAL NOT IN (
@@ -196,24 +188,6 @@ export function sessionsCountQuery(query: SessionsCountQuery): SqlFragment {
   `;
 }
 
-export function sessionReplayChunksQuery(query: {
-  sessionId: string;
-  projectId: string;
-  /** Page size + 1, so the caller can tell whether another page exists. */
-  limit: number;
-  offset: number;
-}): SqlFragment {
-  return sql`
-    SELECT chunk_index, payload
-    FROM ${sql.id(TABLE.sessionReplayChunks)}
-    WHERE session_id = ${sql.string(query.sessionId)}
-      AND project_id = ${sql.string(query.projectId)}
-    ORDER BY started_at, ended_at, chunk_index
-    LIMIT ${sql.uint64(query.limit)}
-    OFFSET ${sql.uint64(query.offset)}
-  `;
-}
-
 export function sessionDistinctValuesQuery(query: {
   projectId: string;
   field: SessionDistinctField;
@@ -247,19 +221,6 @@ export function sessionByIdQuery(query: {
     PREWHERE id = ${sql.string(query.sessionId)}
       AND project_id = ${sql.string(query.projectId)}
     WHERE sign = 1
-  `;
-}
-
-export function sessionHasReplayQuery(query: {
-  sessionId: string;
-  projectId: string;
-}): SqlFragment {
-  return sql`
-    SELECT 1 AS n
-    FROM ${sql.id(TABLE.sessionReplayChunks)}
-    WHERE session_id = ${sql.string(query.sessionId)}
-      AND project_id = ${sql.string(query.projectId)}
-    LIMIT 1
   `;
 }
 

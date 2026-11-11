@@ -36,7 +36,6 @@
     }
   },
   "patchedDependencies": {
-    "@polar-sh/sdk@0.49.0": "patches/@polar-sh__sdk.patch",
     "react-grid-layout@2.3.0": "patches/react-grid-layout@2.3.0.patch"
   },
   "overrides": {
@@ -47,9 +46,6 @@
     "express": "4.19.2",
     "h3": "1.15.4",
     "nuxt": "4.2.2",
-    "react-native": "0.73.6",
-    "expo-application": "5.3.1",
-    "expo-constants": "15.4.5",
     "lucide-react@^1.7.0": "0.555.0",
     "framer-motion@^12.40.0": "12.40.0",
     "motion-dom@^12.23.23": "12.40.0",
@@ -72,7 +68,6 @@
     "migrate:deploy": "bun run --filter @openpanel/db migrate:deploy",
     "seed": "bun run --filter @openpanel/seed seed --",
     "send": "bun run --filter @openpanel/seed send --",
-    "e2e": "bun run --filter start e2e --",
     "dev": "bun run --filter @openpanel/api testing & bun run --filter start dev & wait",
     "typecheck": "bun tooling/scripts/typecheck-workspaces.ts",
     "update-simple-git-hooks": "npx simple-git-hooks",

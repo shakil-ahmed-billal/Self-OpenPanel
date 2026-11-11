@@ -21,7 +21,6 @@ import {
   ingestLegacyEvent,
   ingestTrack,
   isDuplicateIngestRequest,
-  isIngestionWoundDown,
   type TrackOutcome,
 } from './ingest.service';
 import { validateIngestRequest } from './src/client-auth';
@@ -30,9 +29,6 @@ import { produceIncomingEvent } from './src/kafka';
 
 const TAGS = ['Track'];
 const LEGACY_EVENT_TAGS = ['Event'];
-/** Wind-down answers 202 with `{blocked:true}` rather than 402/403 — see
- *  `isIngestionWoundDown`. */
-const WIND_DOWN_STATUS = 202;
 const ACCEPTED_STATUS = 202;
 
 type StatusFn = (code: number, body?: unknown) => unknown;
@@ -87,11 +83,6 @@ function respondToOutcome(outcome: TrackOutcome, status: StatusFn) {
       });
     case 'missing-project-id':
       return status(400, { status: 400, message: 'Missing projectId' });
-    case 'replay-missing-session-id':
-      return status(400, {
-        status: 400,
-        message: 'Session ID is required for replay',
-      });
     case 'profile-not-found':
       return status(404, { status: 404, message: 'Profile not found' });
     case 'profile-property-not-a-number':
@@ -132,31 +123,7 @@ async function botGuard({
   }
 }
 
-/** The wind-down gate: the last `beforeHandle` on both ingest routers. */
-function windDownGuard(deps: AppDeps) {
-  return async ({
-    client,
-    ctx,
-    status,
-  }: {
-    client: { projectId: string | null };
-    ctx: HttpCtx;
-    status: StatusFn;
-  }) => {
-    const blocked = await isIngestionWoundDown(ctx, {
-      projectId: client.projectId,
-      selfHosted: deps.config.selfHosted,
-      logger: ctx.logger,
-    });
-    if (blocked) {
-      return status(WIND_DOWN_STATUS, { blocked: true });
-    }
-  };
-}
-
 export const ingestRoutes = defineRoutes((app, deps: AppDeps) => {
-  const blockWhenWoundDown = windDownGuard(deps);
-
   return app.guard(
     {
       // Answers before the client is ever authenticated. A guard hook runs
@@ -203,11 +170,11 @@ export const ingestRoutes = defineRoutes((app, deps: AppDeps) => {
           {
             clientAuth: { ingest: validateIngestRequest },
             body: zTrackHandlerPayload,
-            beforeHandle: [refuseOversizedBody, botGuard, blockWhenWoundDown],
+            beforeHandle: [refuseOversizedBody, botGuard],
             detail: {
               tags: TAGS,
               description:
-                'Ingest a tracking event (track, identify, group, increment, decrement, replay).',
+                'Ingest a tracking event (track, identify, group, increment, decrement).',
             },
           }
         )
@@ -242,7 +209,7 @@ export const ingestRoutes = defineRoutes((app, deps: AppDeps) => {
           },
           {
             clientAuth: { ingest: validateIngestRequest },
-            beforeHandle: [botGuard, blockWhenWoundDown],
+            beforeHandle: [botGuard],
             detail: {
               tags: TAGS,
               description:
@@ -285,7 +252,6 @@ export const ingestRoutes = defineRoutes((app, deps: AppDeps) => {
                 recordLegacyEventRequest(client.id);
               },
               botGuard,
-              blockWhenWoundDown,
             ],
             detail: {
               tags: LEGACY_EVENT_TAGS,

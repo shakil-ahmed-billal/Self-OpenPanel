@@ -12,111 +12,56 @@ const KEY = 'a'.repeat(64);
 
 const encryptSecrets = <C>(config: C): C => encryptConfigSecrets(KEY, config);
 
-const gcs = (serviceAccountKey: string) =>
+const discord = (url: string) =>
   ({
-    type: 'gcs_export',
-    bucket: 'b',
-    prefix: 'p',
-    format: 'jsonl_gzip',
-    serviceAccountKey,
+    type: 'discord',
+    url,
   }) as const;
 
-const s3AccessKey = (secretAccessKey: string) =>
-  ({
-    type: 's3_export',
-    bucket: 'b',
-    prefix: 'p',
-    region: 'us-east-1',
-    format: 'jsonl_gzip',
-    encryption: 'SSE-S3',
-    authMode: 'access_key',
-    accessKeyId: 'AKIA',
-    secretAccessKey,
-  }) as const;
-
-const s3IamRole = {
-  type: 's3_export',
-  bucket: 'b',
-  prefix: 'p',
-  region: 'us-east-1',
-  format: 'jsonl_gzip',
-  encryption: 'SSE-S3',
-  authMode: 'iam_role',
-  roleArn: 'arn:aws:iam::1:role/x',
-} as const;
+const appConfig = { type: 'app' } as const;
 
 describe('config secret handling', () => {
   it('redacts declared secrets so they never reach a client', () => {
-    expect(redactConfigSecrets(gcs('super-secret')).serviceAccountKey).toBe('');
-    expect(redactConfigSecrets(s3AccessKey('shhh')).secretAccessKey).toBe('');
+    expect(
+      redactConfigSecrets(discord('https://discord.com/api/webhooks/1/secret'))
+        .url
+    ).toBe('');
   });
 
   it('leaves configs without secrets untouched, by identity', () => {
     // The router returns the row as-is when nothing changed, so identity matters.
-    expect(redactConfigSecrets(s3IamRole)).toBe(s3IamRole);
-    expect(redactConfigSecrets({ type: 'slack' })).toEqual({ type: 'slack' });
+    expect(redactConfigSecrets(appConfig)).toBe(appConfig);
   });
 
-  it('is lenient for an empty/unknown config (Slack pre-OAuth is {})', () => {
+  it('is lenient for an empty/unknown config', () => {
     expect(() => redactConfigSecrets({})).not.toThrow();
     expect(() => findEncryptedSecretField({})).not.toThrow();
     expect(findMissingSecretFields({})).toEqual([]);
     expect(findMissingSecretFields({ type: 'nope' })).toEqual([]);
   });
 
-  it('encrypts declared secrets before persisting', () => {
-    const encrypted = encryptSecrets(gcs('super-secret'));
-    expect(encrypted.serviceAccountKey.startsWith('enc:')).toBe(true);
-    expect(encrypted.serviceAccountKey).not.toContain('super-secret');
-  });
-
   it('carries a blank secret over from the stored row on update', () => {
-    const stored = encryptSecrets(gcs('super-secret'));
-    const submitted = carryOverConfigSecrets(gcs(''), stored);
-    expect(submitted.serviceAccountKey).toBe(stored.serviceAccountKey);
+    const stored = discord('https://discord.com/api/webhooks/1/secret');
+    const submitted = carryOverConfigSecrets(discord(''), stored);
+    expect(submitted.url).toBe(stored.url);
   });
 
   it('does not let a submitted secret be overwritten by the stored one', () => {
-    const stored = encryptSecrets(gcs('old'));
-    const submitted = carryOverConfigSecrets(gcs('new-key'), stored);
-    expect(submitted.serviceAccountKey).toBe('new-key');
+    const stored = discord('https://discord.com/api/webhooks/1/old');
+    const submitted = carryOverConfigSecrets(
+      discord('https://discord.com/api/webhooks/1/new'),
+      stored
+    );
+    expect(submitted.url).toBe('https://discord.com/api/webhooks/1/new');
   });
 
   it('reports a blank secret with nothing stored to fall back to', () => {
     expect(
-      findMissingSecretFields(carryOverConfigSecrets(gcs(''), null))
-    ).toEqual(['serviceAccountKey']);
-    expect(findMissingSecretFields(gcs('key'))).toEqual([]);
-    // iam_role has no secret field on the object at all.
-    expect(findMissingSecretFields(s3IamRole)).toEqual([]);
-  });
-
-  it('redacts a nested secret without disturbing its siblings', () => {
-    const slack = {
-      type: 'slack',
-      access_token: 'xoxb-super-secret',
-      team: { id: 'T1', name: 'Acme' },
-      incoming_webhook: {
-        channel: '#alerts',
-        channel_id: 'C1',
-        configuration_url: 'https://acme.slack.com/services/B1',
-        url: 'https://hooks.slack.com/services/T1/B1/secret',
-      },
-    };
-    const redacted = redactConfigSecrets(slack);
-
-    expect(redacted.access_token).toBe('');
-    expect(redacted.incoming_webhook.url).toBe('');
-    // Everything the UI needs stays intact.
-    expect(redacted.incoming_webhook.channel).toBe('#alerts');
-    expect(redacted.incoming_webhook.configuration_url).toBe(
-      'https://acme.slack.com/services/B1'
-    );
-    expect(redacted.team).toEqual({ id: 'T1', name: 'Acme' });
-    // The original is untouched — the worker reads the stored row, not this.
-    expect(slack.incoming_webhook.url).toBe(
-      'https://hooks.slack.com/services/T1/B1/secret'
-    );
+      findMissingSecretFields(carryOverConfigSecrets(discord(''), null))
+    ).toEqual(['url']);
+    expect(
+      findMissingSecretFields(discord('https://discord.com/api/webhooks/1/k'))
+    ).toEqual([]);
   });
 
   it('redacts webhook header values but keeps the keys visible', () => {
@@ -209,15 +154,8 @@ describe('config secret handling', () => {
   });
 
   it('does not encrypt redact-only secrets', () => {
-    // The notification senders read these raw; encrypting without decrypting at
-    // use would break delivery.
-    const slack = encryptSecrets({
-      type: 'slack',
-      access_token: 'xoxb-super-secret',
-      incoming_webhook: { url: 'https://hooks.slack.com/x' },
-    });
-    expect(slack.access_token).toBe('xoxb-super-secret');
-    expect(slack.incoming_webhook.url).toBe('https://hooks.slack.com/x');
+    const stored = discord('https://discord.com/api/webhooks/1/secret');
+    expect(encryptSecrets(stored).url).toBe(stored.url);
   });
 
   it('only flags a replayed ciphertext on encrypted fields', () => {
@@ -231,15 +169,5 @@ describe('config secret handling', () => {
         headers: { Authorization: 'enc:not-really' },
       })
     ).toBeUndefined();
-  });
-
-  it('detects a replayed ciphertext on the input path', () => {
-    // A client is never given a ciphertext, so one arriving is an attempt to
-    // replay a secret lifted from another integration.
-    expect(findEncryptedSecretField(gcs('enc:abc'))).toBe('serviceAccountKey');
-    expect(findEncryptedSecretField(s3AccessKey('enc:abc'))).toBe(
-      'secretAccessKey'
-    );
-    expect(findEncryptedSecretField(gcs('plaintext'))).toBeUndefined();
   });
 });

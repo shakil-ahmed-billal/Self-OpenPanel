@@ -209,11 +209,7 @@ export const zChatMessageMetadata = z.object({
 
 export type ChatMessageMetadata = z.infer<typeof zChatMessageMetadata>;
 
-/**
- * Spend tiers for the chat. Cloud bands follow the plan's event limit;
- * `unlimited` is a self-hosted install (its own API key), `blocked` is a
- * workspace whose dashboard is already locked by billing.
- */
+/** Spend tiers for the chat. */
 export const CHAT_TIERS = [
   'trial',
   'starter',
@@ -233,12 +229,6 @@ export const CHAT_MESSAGES_PER_DAY: Record<ChatTier, number | null> = {
   unlimited: null,
   blocked: 0,
 };
-
-/** Plans up to this many events per month fall in the band. Above the last band is `scale`. */
-export const CHAT_TIER_EVENT_BANDS = {
-  starter: 100_000,
-  growth: 2_500_000,
-} as const;
 
 /** Per-user burst guard on every tier, so a stuck client or script cannot loop. */
 export const CHAT_BURST_LIMIT = { max: 6, windowMs: 60_000 } as const;
@@ -323,12 +313,12 @@ export const CHAT_ROUTES = {
   sessions: {
     path: '/sessions',
     label: 'Sessions',
-    description: 'Session list with session replays.',
+    description: 'Session list.',
   },
   session: {
     path: '/sessions/:sessionId',
     label: 'Session',
-    description: 'One session: its events, path and replay.',
+    description: 'One session: its events and path.',
     params: ['sessionId'],
   },
   profiles: {
@@ -351,32 +341,6 @@ export const CHAT_ROUTES = {
     path: '/cohorts',
     label: 'Cohorts',
     description: 'Saved user cohorts.',
-  },
-  references: {
-    path: '/references',
-    label: 'References',
-    description:
-      'Annotations like launches, campaigns and deploys that show up on charts.',
-  },
-  notifications: {
-    path: '/notifications',
-    label: 'Notifications',
-    description: 'Notification history.',
-  },
-  notificationRules: {
-    path: '/notifications/rules',
-    label: 'Notification rules',
-    description: 'Alert rules: notify on events or funnel completions.',
-  },
-  integrations: {
-    path: '/integrations',
-    label: 'Integrations',
-    description: 'Installed integrations (Slack, Discord, webhooks, exports).',
-  },
-  integrationsAvailable: {
-    path: '/integrations/available',
-    label: 'Available integrations',
-    description: 'Integrations that can be installed.',
   },
   settings: {
     path: '/settings',
@@ -429,7 +393,7 @@ export const CHAT_ROUTES = {
   workspaceSettings: {
     path: '/settings',
     label: 'Workspace settings',
-    description: 'Organization name, members, invites, billing.',
+    description: 'Organization name, members and invites.',
     scope: 'organization',
   },
 } as const satisfies Record<
@@ -477,20 +441,6 @@ export const CHAT_DIALOGS = {
   addDashboard: {
     label: 'Create dashboard',
     description: 'A new empty dashboard. Prefill: name.',
-  },
-  addReference: {
-    label: 'Add reference',
-    description:
-      'Annotate a date on every chart (launch, campaign, deploy). Prefill: title, description, datetime (ISO).',
-  },
-  addNotificationRule: {
-    label: 'Create notification rule',
-    description: 'Alert on an event or a funnel. No prefill.',
-  },
-  addIntegration: {
-    label: 'Add integration',
-    description:
-      'Install an integration. Prefill: type (`slack`, `discord`, `webhook`, or another integration type).',
   },
   addProject: {
     label: 'Create project',
