@@ -142,7 +142,6 @@ test('insightsDaily fans out one insightsProject enqueue per candidate, jobId de
     config: testCoreConfig(),
     services: {
       auth: {} as Services['auth'],
-      notification: {} as Services['notification'],
       insight: {
         listDailyInsightCandidates: async (date) => [
           { projectId: 'p1', date },
@@ -150,7 +149,6 @@ test('insightsDaily fans out one insightsProject enqueue per candidate, jobId de
         ],
       } as ReturnType<typeof createInsightService>,
       gsc: {} as Services['gsc'],
-      integration: {} as Services['integration'],
       cohort: {} as Services['cohort'],
       ingest: {} as Services['ingest'],
       organization: {} as Services['organization'],
@@ -173,7 +171,6 @@ test('insightsDaily fans out one insightsProject enqueue per candidate, jobId de
       dashboard: {} as Services['dashboard'],
       export: {} as Services['export'],
       share: {} as Services['share'],
-      reference: {} as Services['reference'],
       client: {} as Services['client'],
       project: {} as Services['project'],
       user: {} as Services['user'],

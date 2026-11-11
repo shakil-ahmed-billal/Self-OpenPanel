@@ -34,10 +34,6 @@ const TOOL_PHRASES: Record<string, { active: string; done: string }> = {
   search: { active: 'Searching', done: 'Search done' },
   get_profile: { active: 'Loading the profile', done: 'Profile loaded' },
   get_session: { active: 'Loading the session', done: 'Session loaded' },
-  list_references: {
-    active: 'Checking references',
-    done: 'References checked',
-  },
   gsc_overview: {
     active: 'Fetching Search Console',
     done: 'Search Console fetched',
@@ -62,7 +58,6 @@ const TOOL_PHRASES: Record<string, { active: string; done: string }> = {
     done: 'Dashboard created',
   },
   save_chart: { active: 'Saving the chart', done: 'Chart saved' },
-  create_reference: { active: 'Adding the reference', done: 'Reference added' },
   invite_member: { active: 'Sending the invite', done: 'Invite sent' },
   update_project: { active: 'Updating the project', done: 'Project updated' },
   search_docs: { active: 'Reading the docs', done: 'Docs checked' },
@@ -93,8 +88,6 @@ export function approvalPrompt(toolName: string, input: unknown): string {
       const chart = fields.chart as { title?: string } | undefined;
       return `Save "${chart?.title ?? 'this chart'}" to the dashboard?`;
     }
-    case 'create_reference':
-      return `Add the reference "${String(fields.title ?? '')}" on ${String(fields.date ?? '')}?`;
     case 'invite_member':
       return `Invite ${String(fields.email ?? '')} as ${String(fields.role ?? 'member')}?`;
     case 'update_project':

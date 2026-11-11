@@ -5,7 +5,6 @@ import type {
   OpenDialogInput,
 } from '@openpanel/core/modules/assistant/assistant.constants';
 import { CHAT_ROUTES } from '@openpanel/core/modules/assistant/assistant.constants';
-import type { IIntegrationConfig } from '@openpanel/core/modules/integration/integration.constants';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   DefaultChatTransport,
@@ -20,7 +19,6 @@ import { useTRPC } from '@/integrations/trpc/react';
 import { pushModal } from '@/modals';
 
 const CLIENT_TYPES = ['read', 'write', 'root'] as const;
-const DEFAULT_INTEGRATION_TYPE = 'webhook';
 
 function clientType(value: string | undefined) {
   return CLIENT_TYPES.find((type) => type === value);
@@ -38,22 +36,6 @@ export function openDialog(input: OpenDialogInput): void {
       return;
     case 'addDashboard':
       pushModal('AddDashboard', { name: prefill.name });
-      return;
-    case 'addReference':
-      pushModal('AddReference', {
-        title: prefill.title,
-        description: prefill.description,
-        datetime: prefill.datetime ?? prefill.date,
-      });
-      return;
-    case 'addNotificationRule':
-      pushModal('AddNotificationRule', { rule: undefined });
-      return;
-    case 'addIntegration':
-      pushModal('AddIntegration', {
-        type: (prefill.type ??
-          DEFAULT_INTEGRATION_TYPE) as IIntegrationConfig['type'],
-      });
       return;
     case 'addProject':
       pushModal('AddProject');

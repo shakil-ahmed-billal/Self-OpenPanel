@@ -1,16 +1,13 @@
 import { average, round } from '@openpanel/shared';
-import { useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { useChartChrome } from '../common/chart-size';
 import { getCurve } from '../common/curve';
-import { PointClick } from '../common/point-click';
 import { SerieIcon } from '../common/serie-icon';
 import { SerieName } from '../common/serie-name';
 import { POINT_MARKER, previousPeriodColor } from '../common/time-series';
 import { useReportChartContext } from '../context';
 import { Grid } from '@/components/charts/grid';
 import { Line, LineChart } from '@/components/charts/line-chart';
-import { OPReferences } from '@/components/charts/op-references';
 import {
   OPChartTooltip,
   type OPTooltipRow,
@@ -20,8 +17,6 @@ import { YAxis } from '@/components/charts/y-axis';
 import { useConversionRechartDataModel } from '@/hooks/use-conversion-rechart-data-model';
 import { formatDateInterval } from '@/hooks/use-format-date-interval';
 import { useNumber } from '@/hooks/use-numer-formatter';
-import { useTRPC } from '@/integrations/trpc/react';
-import { pushModal } from '@/modals';
 import type { RouterOutputs } from '@/trpc/client';
 import { cn } from '@/utils/cn';
 import { getChartColor } from '@/utils/theme';
@@ -41,29 +36,11 @@ export function Chart({
   series: (ConversionSeries[number] & { index: number })[];
 }) {
   const {
-    report: {
-      interval,
-      projectId,
-      startDate,
-      endDate,
-      range,
-      lineType,
-      options,
-    },
+    report: { interval, lineType, options },
     isEditMode,
-    shareId,
   } = useReportChartContext();
   const chrome = useChartChrome();
   const number = useNumber();
-  const trpc = useTRPC();
-  const references = useQuery(
-    trpc.reference.getChartReferences.queryOptions({
-      projectId,
-      startDate,
-      endDate,
-      range,
-    })
-  );
   const averageRate = average(
     series.map((serie) =>
       average(
@@ -124,11 +101,6 @@ export function Chart({
       }),
     [series, formatRate]
   );
-  const addReference = useCallback((point: ConversionPoint) => {
-    pushModal('AddReference', {
-      datetime: new Date(point.date).toISOString(),
-    });
-  }, []);
 
   return (
     <div className={cn('col h-full w-full', isEditMode && 'card p-4')}>
@@ -185,15 +157,12 @@ export function Chart({
             stroke={averageColor}
             strokeWidth={1.5}
           />
-          <OPReferences items={references.data} />
           <OPChartTooltip<ConversionPoint>
             interval={interval}
-            references={references.data}
             rows={tooltipRows}
             showCrosshair
             showDots
           />
-          {!shareId && <PointClick<ConversionPoint> onClick={addReference} />}
         </LineChart>
         <div
           className="pointer-events-none absolute top-0 right-3 font-medium text-xs"

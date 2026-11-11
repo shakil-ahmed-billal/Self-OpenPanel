@@ -8,7 +8,6 @@ import { ComposedChart } from '../charts/composed-chart';
 import { Grid } from '../charts/grid';
 import { Line } from '../charts/line';
 import { useDashedTail } from '../charts/op-dashed-tail';
-import { OPReferences } from '../charts/op-references';
 import { OPReferrerSpikes } from '../charts/op-referrer-spikes';
 import { OPSeriesDots } from '../charts/op-series-dots';
 import { OPChartTooltip } from '../charts/op-tooltip';
@@ -254,18 +253,6 @@ function Chart({
   const trpc = useTRPC();
   const isRevenueTab = activeMetric.key === 'total_revenue';
 
-  const references = useQuery(
-    trpc.reference.getChartReferences.queryOptions(
-      {
-        projectId,
-        startDate,
-        endDate,
-        range,
-      },
-      { staleTime: 1000 * 60 * 10 }
-    )
-  );
-
   const [filters, setFilter] = useEventQueryFilters();
   const referrerSpikes = useQuery(
     trpc.overview.getReferrerSpikes.queryOptions(
@@ -415,7 +402,6 @@ function Chart({
       <OPChartTooltip<ChartPoint>
         indicatorColor={primaryColor}
         interval={interval}
-        references={references.data}
         rows={(point) => {
           const primaryVal = point[activeMetric.key] as number | undefined;
           const primaryPrev = point[`prev_${activeMetric.key}`] as
@@ -455,7 +441,6 @@ function Chart({
         spikes={flatSpikes}
       />
 
-      <OPReferences items={references.data} />
       <OPReferrerSpikes
         items={referrerSpikes.data}
         onSpikeClick={handleSpikeClick}

@@ -8,7 +8,6 @@ import {
 } from '../common/time-series';
 import { Grid } from '@/components/charts/grid';
 import { Line, LineChart } from '@/components/charts/line-chart';
-import { OPReferences } from '@/components/charts/op-references';
 import { OPChartTooltip } from '@/components/charts/op-tooltip';
 import { XAxis } from '@/components/charts/x-axis';
 import { YAxis } from '@/components/charts/y-axis';
@@ -65,11 +64,9 @@ export function Chart({ data, series }: Props) {
             strokeWidth={2}
           />
         ))}
-        <OPReferences items={chart.references} />
         <OPChartTooltip<TimeSeriesPoint>
           extra={chart.tooltipExtra}
           interval={chart.interval}
-          references={chart.references}
           rows={chart.tooltipRows}
           showCrosshair
           showDots

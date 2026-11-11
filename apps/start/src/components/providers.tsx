@@ -7,7 +7,6 @@ import {
   ChartConfigProvider,
   type ChartConfigValue,
 } from '@/components/charts/chart-config-context';
-import { NotificationProvider } from '@/components/notifications/notification-provider';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { PageContextProvider } from '@/contexts/page-context';
 import { ModalProvider } from '@/modals';
@@ -37,7 +36,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
             <ChartConfigProvider value={CHART_CONFIG}>
               <PageContextProvider>
                 {children}
-                <NotificationProvider />
                 <Toaster />
                 <ModalProvider />
               </PageContextProvider>

@@ -8,7 +8,6 @@ import {
 import { useReportChartContext } from '../context';
 import { ComposedChart } from '@/components/charts/composed-chart';
 import { Grid } from '@/components/charts/grid';
-import { OPReferences } from '@/components/charts/op-references';
 import { OPChartTooltip } from '@/components/charts/op-tooltip';
 import { SeriesBar } from '@/components/charts/series-bar';
 import { XAxis } from '@/components/charts/x-axis';
@@ -73,11 +72,9 @@ export function Chart({ data, series }: Props) {
             radius={BAR_RADIUS}
           />
         ))}
-        <OPReferences items={chart.references} />
         <OPChartTooltip<TimeSeriesPoint>
           extra={chart.tooltipExtra}
           interval={chart.interval}
-          references={chart.references}
           rows={chart.tooltipRows}
           showCrosshair={false}
           showDots={false}

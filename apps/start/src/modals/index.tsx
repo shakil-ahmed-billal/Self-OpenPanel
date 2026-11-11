@@ -3,10 +3,7 @@ import AddClient from './add-client';
 import AddCohort from './add-cohort';
 import AddDashboard from './add-dashboard';
 import AddGroup from './add-group';
-import AddIntegration from './add-integration';
-import AddNotificationRule from './add-notification-rule';
 import AddProject from './add-project';
-import AddReference from './add-reference';
 import type { ConfirmProps } from './confirm';
 import Confirm from './confirm';
 import ConfirmDeleteAccount from './confirm-delete-account';
@@ -22,7 +19,6 @@ import EditDashboard from './edit-dashboard';
 import EditEvent from './edit-event';
 import EditGroup from './edit-group';
 import EditMember from './edit-member';
-import EditReference from './edit-reference';
 import EditReport from './edit-report';
 import InsightDetails from './insight-details';
 import MoveReport from './move-report';
@@ -66,17 +62,13 @@ const modals = {
   AddDashboard,
   EditDashboard,
   EditReport,
-  EditReference,
   ShareOverviewModal,
   ShareDashboardModal,
   ShareReportModal,
-  AddReference,
   ViewChartUsers,
   DateRangerPicker,
   DateTimePicker,
   OverviewChartDetails,
-  AddIntegration,
-  AddNotificationRule,
   OverviewFilters,
   TableFilters,
   CreateInvite,

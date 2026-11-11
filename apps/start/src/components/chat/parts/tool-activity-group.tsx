@@ -35,12 +35,6 @@ function labelOf(part: ToolPart, status: ItemStatus): string {
   if (status === 'error') {
     return `${toolPhrase(name, 'active')} failed`;
   }
-  if (name === 'list_references') {
-    const rows = (part.output as { rows?: unknown[] } | undefined)?.rows;
-    if (Array.isArray(rows) && rows.length === 0) {
-      return 'No references in this window';
-    }
-  }
   if (name === 'search') {
     return 'Nothing matched the search';
   }

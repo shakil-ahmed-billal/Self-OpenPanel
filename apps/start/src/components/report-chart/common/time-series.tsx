@@ -1,6 +1,5 @@
 import type { IChartType } from '@openpanel/core/modules/report/report.constants';
-import { useQuery } from '@tanstack/react-query';
-import { BookmarkIcon, UsersIcon } from 'lucide-react';
+import { UsersIcon } from 'lucide-react';
 import { type ReactNode, useCallback, useRef } from 'react';
 import { useReportChartContext } from '../context';
 import {
@@ -21,7 +20,6 @@ import {
   useRechartDataModel,
 } from '@/hooks/use-rechart-data-model';
 import type { IVisibleSeries } from '@/hooks/use-visible-series';
-import { useTRPC } from '@/integrations/trpc/react';
 import { pushModal } from '@/modals';
 import type { IChartData } from '@/trpc/client';
 import { cn } from '@/utils/cn';
@@ -62,16 +60,7 @@ export function useTimeSeriesChart({
     shareId,
   } = useReportChartContext();
   const chrome = useChartChrome();
-  const trpc = useTRPC();
   const number = useNumber();
-  const references = useQuery(
-    trpc.reference.getChartReferences.queryOptions({
-      projectId,
-      startDate,
-      endDate,
-      range,
-    })
-  );
   const chartData = useRechartDataModel(series) as TimeSeriesPoint[];
   const dashFromIndex = useDashedTail({ data: chartData, range, interval });
 
@@ -149,15 +138,6 @@ export function useTimeSeriesChart({
             });
           },
         },
-        {
-          label: 'Add Reference',
-          icon: <BookmarkIcon size={16} />,
-          onClick: () => {
-            pushModal('AddReference', {
-              datetime: new Date(clickedData.date).toISOString(),
-            });
-          },
-        },
       ];
     },
     [
@@ -180,7 +160,6 @@ export function useTimeSeriesChart({
 
   return {
     chartData,
-    references: references.data,
     previous,
     interval,
     ...chrome,

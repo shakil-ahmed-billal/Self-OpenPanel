@@ -3,9 +3,7 @@ import { type ReactNode, useMemo } from 'react';
 import { getPreviousMetric } from '../../utils/previous-metric';
 import { PreviousDiffIndicatorPure } from '../report-chart/common/previous-diff-indicator';
 import { useChart } from './chart-context';
-import type { ChartMarker } from './markers/marker-group';
 import { OPDatePill } from './op-date-pill';
-import { type OPReferenceItem, toChartMarkers } from './op-references';
 import type { OPReferrerSpikeItem } from './op-referrer-spikes';
 import { ChartTooltip, type ChartTooltipProps } from './tooltip/chart-tooltip';
 import { SerieIcon } from '@/components/report-chart/common/serie-icon';
@@ -65,10 +63,6 @@ export interface OPChartTooltipProps<T extends Record<string, unknown>>
   extra?: (point: T) => ReactNode;
   /** Min width of the tooltip card. Default 168. */
   minWidth?: number;
-  /** When set, references matching the hovered date are listed below the rows. */
-  references?: OPReferenceItem[] | null;
-  /** Max references to list in the tooltip. Default 3. */
-  referencesLimit?: number;
   /** Auto-detected referrer spikes; the matching bucket's spike is shown below. */
   spikes?: OPReferrerSpikeItem[] | null;
   /** Show the hovered date (or category) in a pill on the x axis. Default: true. */
@@ -81,17 +75,10 @@ export function OPChartTooltip<T extends Record<string, unknown>>({
   rows,
   extra,
   minWidth = TOOLTIP_MIN_WIDTH,
-  references,
-  referencesLimit = 3,
   spikes,
   datePill = true,
   ...rest
 }: OPChartTooltipProps<T>) {
-  const referenceMarkers = useMemo(
-    () => toChartMarkers(references),
-    [references]
-  );
-
   return (
     <>
       <ChartTooltip
@@ -102,8 +89,6 @@ export function OPChartTooltip<T extends Record<string, unknown>>({
             interval={interval}
             minWidth={minWidth}
             point={point as T}
-            referenceMarkers={referenceMarkers}
-            referencesLimit={referencesLimit}
             rows={rows(point as T)}
             spikes={spikes ?? null}
             title={title ? title(point as T) : undefined}
@@ -123,8 +108,6 @@ interface OPTooltipBodyProps<T> {
   rows: OPTooltipRow[];
   extra?: ReactNode;
   minWidth: number;
-  referenceMarkers: ChartMarker[];
-  referencesLimit: number;
   spikes: OPReferrerSpikeItem[] | null;
 }
 
@@ -135,15 +118,12 @@ function OPTooltipBody<T extends Record<string, unknown>>({
   rows,
   extra,
   minWidth,
-  referenceMarkers,
-  referencesLimit,
   spikes,
 }: OPTooltipBodyProps<T>) {
   const formatDate = useFormatDateInterval({
     interval: interval ?? 'day',
     short: false,
   });
-  const activeReferences = useReferencesForHoveredPoint(referenceMarkers);
   const activeSpike = useSpikeForHoveredPoint(spikes);
 
   const resolvedTitle = useMemo(() => {
@@ -171,44 +151,9 @@ function OPTooltipBody<T extends Record<string, unknown>>({
         <OPTooltipRowView key={`${row.label}-${index}`} row={row} />
       ))}
       {extra}
-      <OPAnnotationsBlock
-        references={activeReferences}
-        referencesLimit={referencesLimit}
-        spike={activeSpike}
-      />
+      <OPAnnotationsBlock spike={activeSpike} />
     </OPTooltipCard>
   );
-}
-
-/**
- * Returns references whose timestamp falls in the bucket of the currently
- * hovered data point. We snap each reference to its nearest data index and
- * compare against `tooltipData.index` — fine-grained enough for hourly /
- * minute intervals (bklit's built-in `useActiveMarkers` only matches by day).
- *
- * The nearest-index pass is O(refs × data) and only depends on inputs that
- * change rarely (refs, data), so it's precomputed once and cached. Hover
- * filtering then runs in O(refs) per mouse move instead of O(refs × data).
- */
-function useReferencesForHoveredPoint(
-  references: ChartMarker[]
-): ChartMarker[] {
-  const { tooltipData, data, xAccessor } = useChart();
-
-  const nearestIndices = useMemo(
-    () => computeNearestIndices(references, data, xAccessor, (m) => m.date),
-    [references, data, xAccessor]
-  );
-
-  return useMemo(() => {
-    if (!tooltipData || references.length === 0) {
-      return [];
-    }
-    const hoveredIndex = tooltipData.index;
-    return references.filter(
-      (_, refIdx) => nearestIndices[refIdx] === hoveredIndex
-    );
-  }, [tooltipData, references, nearestIndices]);
 }
 
 function useSpikeForHoveredPoint(
@@ -276,37 +221,14 @@ function computeNearestIndices<T>(
   });
 }
 
-function OPAnnotationsBlock({
-  references,
-  referencesLimit,
-  spike,
-}: {
-  references: ChartMarker[];
-  referencesLimit: number;
-  spike: OPReferrerSpikeItem | null;
-}) {
-  const visibleRefs = references.slice(0, referencesLimit);
-  const hiddenRefs = Math.max(0, references.length - referencesLimit);
-  if (visibleRefs.length === 0 && !spike) {
+function OPAnnotationsBlock({ spike }: { spike: OPReferrerSpikeItem | null }) {
+  if (!spike) {
     return null;
   }
 
   return (
     <div className="col mt-1 gap-2 border-border border-t pt-2">
-      {visibleRefs.map((marker) => (
-        <OPAnnotationRow
-          description={marker.description}
-          icon={marker.icon}
-          key={marker.title}
-          title={marker.title}
-        />
-      ))}
-      {hiddenRefs > 0 && (
-        <div className="pl-8 text-muted-foreground text-xs">
-          +{hiddenRefs} more
-        </div>
-      )}
-      {spike && <OPSpikeAnnotation spike={spike} />}
+      <OPSpikeAnnotation spike={spike} />
     </div>
   );
 }

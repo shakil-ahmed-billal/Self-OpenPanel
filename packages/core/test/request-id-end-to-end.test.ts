@@ -25,7 +25,6 @@ import {
 import { formatClickhouseDate } from '../src/modules/event/src/dates';
 import { createIncomingEventHandler } from '../src/modules/ingest/src/consumer-handler';
 import type { IncomingEventPayload } from '../src/modules/ingest/src/incoming-event';
-import type { IncomingEventBindings } from '../src/modules/ingest/src/incoming-event-handler';
 import type { IClickhouseSession } from '../src/modules/session/session.service';
 import type { ServiceDeps } from '../src/services';
 import { testCoreConfig } from './config-fixture';
@@ -531,10 +530,6 @@ function ingestDeps() {
   return { deps, lines, eventsBuffered, recorded: producers.recorded };
 }
 
-const ingestBindings: IncomingEventBindings = {
-  checkNotificationRulesForEvent: () => Promise.resolve(null),
-};
-
 function ingestEnvelope(requestId?: string): IncomingEventPayload {
   return {
     geo: {
@@ -585,10 +580,7 @@ function ingestTrail(lines: IngestLine[]) {
 }
 
 test("the envelope's requestId reaches the handler's logger, its buffer write and the session_end it enqueues", async () => {
-  const handleEvent = createIncomingEventHandler(
-    ingestHarness.deps,
-    ingestBindings
-  );
+  const handleEvent = createIncomingEventHandler(ingestHarness.deps);
 
   await handleEvent(ingestEnvelope(INGEST_REQUEST_ID), {
     partition: 3,
@@ -621,46 +613,8 @@ test("the envelope's requestId reaches the handler's logger, its buffer write an
   ]);
 });
 
-// The binding enqueues what `triggerNotification` enqueues, so the envelope
-// must carry the message's own requestId, not a boot-scope one.
-test("a converted read path's own enqueue carries the message's requestId", async () => {
-  const handleEvent = createIncomingEventHandler(ingestHarness.deps, {
-    ...ingestBindings,
-    checkNotificationRulesForEvent: (deps) =>
-      deps.queues.notification.sendNotification.add({
-        notification: {
-          projectId: INGEST_PROJECT_ID,
-          title: 'rule matched',
-          message: 'screen_view',
-        },
-      }),
-  });
-
-  await handleEvent(ingestEnvelope(INGEST_REQUEST_ID), {
-    partition: 0,
-    offset: '1',
-  });
-
-  // One per event the message produced (session_start + screen_view); both
-  // enqueued off the same message scope.
-  const dispatched = ingestHarness.recorded
-    .filter(({ queue }) => queue === 'notification')
-    .map(({ job, meta }) => ({ job, requestId: meta.requestId }));
-
-  expect(dispatched).toHaveLength(2);
-  expect(dispatched).toEqual(
-    dispatched.map(() => ({
-      job: 'sendNotification',
-      requestId: INGEST_REQUEST_ID,
-    }))
-  );
-});
-
 test('a second message is scoped to its own id, and an envelope without one still gets scoped', async () => {
-  const handleEvent = createIncomingEventHandler(
-    ingestHarness.deps,
-    ingestBindings
-  );
+  const handleEvent = createIncomingEventHandler(ingestHarness.deps);
   const meta = { partition: 0, offset: '1' };
 
   await handleEvent(ingestEnvelope(INGEST_REQUEST_ID), meta);

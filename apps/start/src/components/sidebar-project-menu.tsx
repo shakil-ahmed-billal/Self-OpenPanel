@@ -1,13 +1,11 @@
 import type { IServiceDashboards } from '@openpanel/core';
 import { useNavigate } from '@tanstack/react-router';
 import {
-  BellIcon,
   Building2Icon,
   ChartLineIcon,
   CogIcon,
   GanttChartIcon,
   Globe2Icon,
-  GridIcon,
   LayersIcon,
   LayoutPanelTopIcon,
   SearchIcon,
@@ -18,7 +16,6 @@ import {
   UserCircleIcon,
   UsersIcon,
   WallpaperIcon,
-  WorkflowIcon,
 } from 'lucide-react';
 import { useEffect } from 'react';
 import {
@@ -69,19 +66,6 @@ export default function SidebarProjectMenu({
         href={'/settings'}
         icon={CogIcon}
         label="Settings"
-      />
-      <SidebarLink href={'/references'} icon={GridIcon} label="References" />
-      <SidebarLink
-        exact={false}
-        href={'/notifications'}
-        icon={BellIcon}
-        label="Notifications"
-      />
-      <SidebarLink
-        exact={false}
-        href={'/integrations'}
-        icon={WorkflowIcon}
-        label="Integrations"
       />
       <SidebarLink href={'..'} icon={UndoDotIcon} label="Back to workspace" />
     </>
