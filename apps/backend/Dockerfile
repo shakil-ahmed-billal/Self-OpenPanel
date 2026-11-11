@@ -127,7 +127,6 @@ COPY --from=prod-deps --chown=bun:bun /app/node_modules ./node_modules
 COPY --from=prod-deps --chown=bun:bun /app/apps/backend ./apps/backend
 
 COPY --from=prod-deps --chown=bun:bun /app/packages ./packages
-COPY --from=prod-deps --chown=bun:bun /app/packages/tsconfig ./packages/tsconfig
 
 COPY --from=prisma-cli --chown=bun:bun /opt/prisma /opt/prisma
 

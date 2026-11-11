@@ -33,11 +33,10 @@ export default defineConfig({
       'react-syntax-highlighter',
       'lowlight',
       'highlight.js',
-      // CommonJS that Node's ESM loader gets wrong in the built server:
-      // @visx/responsive imports `lodash/debounce` without an extension, and
-      // react-svg-worldmap's default export arrives as `{ default }`. Bundled,
-      // both resolve.
-      '@visx/responsive',
+      // @visx/* packages ship extensionless ESM internal imports (e.g. @visx/scale/esm/scales/band)
+      // that fail Node's native ESM resolver during Vite dev SSR unless transformed by Vite.
+      // react-svg-worldmap's default export arrives as `{ default }`; lodash/debounce is extensionless.
+      /^@visx\//,
       'lodash',
       'react-svg-worldmap',
       // react-svg-worldmap requires d3-geo v2 (CommonJS) while the choropleth
@@ -45,5 +44,25 @@ export default defineConfig({
       // d3-geo the server output ships, and v2's default import fails on v3.
       'd3-geo',
     ],
+    // Vite dev SSR runs `noExternal` packages in an ESM ModuleRunner without `require`/`exports`.
+    // Pre-bundling CommonJS entries here converts them to ESM in dev without breaking Nitro builds.
+    optimizeDeps: {
+      include: [
+        '@visx/responsive > lodash/debounce',
+        'lodash.debounce',
+        'lodash.isequal',
+        'lodash.throttle',
+        'react-svg-worldmap',
+        'react-svg-worldmap/dist/countries.geo',
+        'react-syntax-highlighter',
+        'react-syntax-highlighter > lowlight',
+        'react-syntax-highlighter > lowlight/lib/core',
+        'react-syntax-highlighter > highlight.js/lib/core',
+        'react-syntax-highlighter > highlight.js/lib/languages/typescript',
+        'react-syntax-highlighter > highlight.js/lib/languages/bash',
+        'react-syntax-highlighter > highlight.js/lib/languages/json',
+        'react-syntax-highlighter > highlight.js/lib/languages/markdown',
+      ],
+    },
   },
 });

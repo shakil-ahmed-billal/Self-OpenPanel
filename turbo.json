@@ -2,16 +2,16 @@
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
     "build": {
-      "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
       "outputs": [".output/**", ".nitro/**", "dist/**", "build/**"]
     },
-    "typecheck": {
-      "dependsOn": ["^typecheck"]
+    "@openpanel/web#build": {
+      "dependsOn": ["@openpanel/sdk#build"],
+      "inputs": ["$TURBO_DEFAULT$"],
+      "outputs": ["dist/**"]
     },
-    "lint": {
-      "dependsOn": ["^lint"]
-    },
+    "typecheck": {},
+    "lint": {},
     "dev": {
       "cache": false,
       "persistent": true

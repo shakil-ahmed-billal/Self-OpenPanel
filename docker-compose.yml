@@ -2,7 +2,8 @@ version: "3"
 
 services:
   op-db:
-    image: postgres:15-alpine
+    image: postgres:16
+    container_name: openpanel-postgres
     restart: always
     volumes:
       - ./docker/data/op-db-data:/var/lib/postgresql/data
@@ -15,7 +16,8 @@ services:
       - POSTGRES_PASSWORD=postgres
 
   op-kv:
-    image: redis:7.2.5-alpine
+    image: redis:alpine
+    container_name: openpanel-redis
     restart: always
     volumes:
       - ./docker/data/op-kv-data:/data
@@ -25,6 +27,7 @@ services:
 
   op-ch:
     image: clickhouse/clickhouse-server:26.1.3.52
+    container_name: clickhouse
     restart: always
     volumes:
       - ./docker/data/op-ch-data:/var/lib/clickhouse
@@ -45,6 +48,7 @@ services:
 
   op-rp:
     image: redpandadata/redpanda:v25.1.4
+    container_name: redpanda
     restart: always
     command:
       - redpanda
@@ -85,6 +89,7 @@ services:
 
   op-rp-console:
     image: redpandadata/console:v3.7.2
+    container_name: redpanda-ui
     restart: always
     depends_on:
       - op-rp

@@ -33,7 +33,11 @@ function clearStalePorts() {
         for (const line of res.split('\n')) {
           const parts = line.trim().split(/\s+/);
           const pid = parts.at(-1);
-          if (pid && !Number.isNaN(Number(pid)) && Number(pid) !== process.pid) {
+          if (
+            pid &&
+            !Number.isNaN(Number(pid)) &&
+            Number(pid) !== process.pid
+          ) {
             execSync(`taskkill /F /PID ${pid}`, { stdio: 'ignore' });
           }
         }
@@ -111,7 +115,8 @@ function filterNoisyLines(line) {
     return false;
   }
   return !(
-    line.startsWith('> @openpanel/') || line.includes('Failed to benchmark file I/O')
+    line.startsWith('> @openpanel/') ||
+    line.includes('Failed to benchmark file I/O')
   );
 }
 
