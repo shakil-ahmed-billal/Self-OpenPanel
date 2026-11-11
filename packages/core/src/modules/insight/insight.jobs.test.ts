@@ -34,10 +34,8 @@ function stubJobCtx(
 ): JobCtx {
   const services: Services = {
     auth: {} as Services['auth'],
-    notification: {} as Services['notification'],
     insight: insight as ReturnType<typeof createInsightService>,
     gsc: {} as Services['gsc'],
-    integration: {} as Services['integration'],
     cohort: {} as Services['cohort'],
     ingest: {} as Services['ingest'],
     organization: {} as Services['organization'],
@@ -60,7 +58,6 @@ function stubJobCtx(
     dashboard: {} as Services['dashboard'],
     export: {} as Services['export'],
     share: {} as Services['share'],
-    reference: {} as Services['reference'],
     client: {} as Services['client'],
     project: {} as Services['project'],
     user: {} as Services['user'],
