@@ -43,6 +43,11 @@ export default defineConfig({
       // uses v3 (ESM, no default export). Left external, both import the one
       // d3-geo the server output ships, and v2's default import fails on v3.
       'd3-geo',
+      // Nested deps under @number-flow/react (esm-env, number-flow) inside Bun's isolated
+      // store are missed by Nitro's node-server tracer, causing ERR_MODULE_NOT_FOUND at runtime.
+      '@number-flow/react',
+      'number-flow',
+      'esm-env',
     ],
     // Vite dev SSR runs `noExternal` packages in an ESM ModuleRunner without `require`/`exports`.
     // Pre-bundling CommonJS entries here converts them to ESM in dev without breaking Nitro builds.
