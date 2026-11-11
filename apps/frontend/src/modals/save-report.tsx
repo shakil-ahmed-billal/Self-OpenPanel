@@ -50,6 +50,7 @@ export default function SaveReport({
             projectId,
           })
         );
+        queryClient.invalidateQueries(trpc.report.listAll.pathFilter());
         queryClient.invalidateQueries(trpc.dashboard.list.pathFilter());
 
         const goToReport = () => {

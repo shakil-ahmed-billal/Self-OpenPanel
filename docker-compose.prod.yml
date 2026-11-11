@@ -53,6 +53,34 @@ services:
     networks:
       - internal
 
+  op-rp:
+    image: openpanel-redpanda:latest
+    build:
+      context: ./docker/redpanda
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --kafka-addr=internal://0.0.0.0:9092
+      - --advertise-kafka-addr=internal://op-rp:9092
+      - --rpc-addr=0.0.0.0:33145
+      - --advertise-rpc-addr=op-rp:33145
+      - --smp=1
+      - --memory=512M
+      - --mode=dev-container
+      - --default-log-level=info
+    volumes:
+      - op_rp_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health -X admin.hosts=localhost:9644 | grep -q 'Healthy:.*true'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - internal
+
   op-api:
     image: openpanel-api:latest
     build:
@@ -74,6 +102,8 @@ services:
         condition: service_healthy
       op-ch:
         condition: service_healthy
+      op-rp:
+        condition: service_healthy
     environment:
       ROLE: api
       NODE_ENV: production
@@ -84,6 +114,7 @@ services:
       DATABASE_URL_DIRECT: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@op-db:5432/${POSTGRES_DB:-openpanel}?schema=public
       REDIS_URL: redis://op-kv:6379
       CLICKHOUSE_URL: http://op-ch:8123/openpanel
+      KAFKA_BROKERS: ${KAFKA_BROKERS:-op-rp:9092}
       DASHBOARD_URL: ${DASHBOARD_URL:-https://analytics.naxtbrand.com}
       API_URL: ${API_URL:-https://op-api.naxtbrand.com}
       API_CORS_ORIGINS: ${API_CORS_ORIGINS:-https://analytics.naxtbrand.com}
@@ -124,6 +155,7 @@ services:
       DATABASE_URL_DIRECT: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@op-db:5432/${POSTGRES_DB:-openpanel}?schema=public
       REDIS_URL: redis://op-kv:6379
       CLICKHOUSE_URL: http://op-ch:8123/openpanel
+      KAFKA_BROKERS: ${KAFKA_BROKERS:-op-rp:9092}
       DASHBOARD_URL: ${DASHBOARD_URL:-https://analytics.naxtbrand.com}
       API_URL: ${API_URL:-https://op-api.naxtbrand.com}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
@@ -169,6 +201,7 @@ volumes:
   op_db_data:
   op_kv_data:
   op_ch_data:
+  op_rp_data:
 
 networks:
   internal:

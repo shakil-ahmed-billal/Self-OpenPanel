@@ -5,7 +5,11 @@ import {
   type IChartEventFilter,
   type IChartEventItem,
 } from './report.constants';
-import { transformFilter, updateReportLayouts } from './report.service';
+import {
+  getReportsByProjectId,
+  transformFilter,
+  updateReportLayouts,
+} from './report.service';
 import { mergeGlobalFilters } from './src/series';
 
 const globalFilter: IChartEventFilter = {
@@ -165,5 +169,87 @@ describe('updateReportLayouts', () => {
     });
     expect(transaction).not.toHaveBeenCalled();
     expect(upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe('getReportsByProjectId', () => {
+  it('lists all project reports with dashboard metadata and transformed series', async () => {
+    const createdAt = new Date('2026-11-10T10:00:00.000Z');
+    const updatedAt = new Date('2026-11-11T12:00:00.000Z');
+    const findMany = mock(async () => [
+      {
+        id: 'rep_1',
+        name: 'Traffic Trend',
+        projectId: 'proj_1',
+        dashboardId: 'dash_1',
+        chartType: 'linear',
+        lineType: 'monotone',
+        interval: 'day',
+        range: '7d',
+        previous: false,
+        formula: null,
+        unit: null,
+        metric: 'sum',
+        criteria: null,
+        funnelGroup: null,
+        funnelWindow: null,
+        options: null,
+        display: { view: 'chart' },
+        visibleSeries: [],
+        startDate: null,
+        endDate: null,
+        breakdowns: [],
+        globalFilters: [],
+        events: [
+          {
+            id: 'A',
+            name: 'screen_view',
+            type: 'event',
+            segment: 'event',
+            filters: [],
+          },
+        ],
+        layout: null,
+        dashboard: { id: 'dash_1', name: 'Executive Overview' },
+        createdAt,
+        updatedAt,
+      },
+    ]);
+    const deps = { db: { report: { findMany } } } as unknown as ServiceDeps;
+
+    const result = await getReportsByProjectId(deps, 'proj_1');
+
+    expect(findMany).toHaveBeenCalledWith({
+      where: { projectId: 'proj_1' },
+      include: {
+        layout: true,
+        dashboard: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      id: 'rep_1',
+      name: 'Traffic Trend',
+      dashboardId: 'dash_1',
+      dashboardName: 'Executive Overview',
+      chartType: 'linear',
+      series: [
+        {
+          id: 'A',
+          name: 'screen_view',
+          type: 'event',
+          segment: 'event',
+          filters: [],
+        },
+      ],
+      createdAt,
+      updatedAt,
+    });
   });
 });

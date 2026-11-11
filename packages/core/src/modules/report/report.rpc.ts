@@ -71,6 +71,21 @@ export const reportRouter = createTRPCRouter({
       return ctx.services.report.getReportsByDashboardId(dashboardId);
     }),
 
+  listAll: protectedProcedure
+    .input(
+      z.object({
+        projectId: z.string(),
+      })
+    )
+    .query(async ({ input: { projectId }, ctx }) => {
+      await ctx.services.auth.requireProjectAccess({
+        userId: ctx.session.userId,
+        projectId,
+        level: 'read',
+      });
+      return ctx.services.report.getReportsByProjectId(projectId);
+    }),
+
   create: protectedProcedure
     .input(
       z.object({

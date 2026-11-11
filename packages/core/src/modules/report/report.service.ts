@@ -135,6 +135,41 @@ export async function getReportsByDashboardId(
   return reports.map(transformReport);
 }
 
+/**
+ * Lists every saved report in a project across all dashboards, enriched with
+ * its owning dashboard name for the Reports directory.
+ */
+export async function getReportsByProjectId(
+  deps: ServiceDeps,
+  projectId: string
+) {
+  const reports = await deps.db.report.findMany({
+    where: {
+      projectId,
+    },
+    include: {
+      layout: true,
+      dashboard: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+    orderBy: {
+      updatedAt: 'desc',
+    },
+  });
+
+  return reports.map((report) => ({
+    ...transformReport(report),
+    dashboardId: report.dashboardId,
+    dashboardName: report.dashboard.name,
+    createdAt: report.createdAt,
+    updatedAt: report.updatedAt,
+  }));
+}
+
 export async function getReportById(deps: ServiceDeps, id: string) {
   const db = deps.db;
   const report = await db.report.findUnique({
@@ -497,6 +532,10 @@ export function createReportService(
       dashboardId: string
     ): ReturnType<typeof getReportsByDashboardId> =>
       getReportsByDashboardId(deps, dashboardId),
+    getReportsByProjectId: (
+      projectId: string
+    ): ReturnType<typeof getReportsByProjectId> =>
+      getReportsByProjectId(deps, projectId),
     getReportById: (id: string): ReturnType<typeof getReportById> =>
       getReportById(deps, id),
     getReportByIdOrThrow: (

@@ -238,6 +238,7 @@ function Component() {
     trpc.report.delete.mutationOptions({
       onError: handleErrorToastOptions({}),
       onSuccess() {
+        queryClient.invalidateQueries(trpc.report.listAll.pathFilter());
         queryClient.invalidateQueries(trpc.dashboard.list.pathFilter());
         reportsQuery.refetch();
         toast('Report deleted');
@@ -249,6 +250,7 @@ function Component() {
     trpc.report.duplicate.mutationOptions({
       onError: handleErrorToastOptions({}),
       onSuccess() {
+        queryClient.invalidateQueries(trpc.report.listAll.pathFilter());
         queryClient.invalidateQueries(trpc.dashboard.list.pathFilter());
         reportsQuery.refetch();
         toast('Report duplicated');

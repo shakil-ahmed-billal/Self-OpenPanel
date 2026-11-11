@@ -37,6 +37,7 @@ export function ReportSaveButton({ className }: ReportSaveButtonProps) {
             projectId: res.projectId,
           })
         );
+        queryClient.invalidateQueries(trpc.report.listAll.pathFilter());
       },
       onError: handleError,
     })

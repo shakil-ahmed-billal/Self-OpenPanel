@@ -101,6 +101,7 @@ export default function ActivationBanner() {
         navigate({
           to: '/$organizationId/$projectId/reports',
           params: { organizationId, projectId },
+          search: { new: true },
         });
       },
     },

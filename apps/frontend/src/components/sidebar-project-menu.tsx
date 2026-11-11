@@ -106,9 +106,9 @@ function SidebarReportLink() {
   }, [navigate, organizationId, projectId]);
 
   return (
-    <ProjectLink className={sidebarItemClassName} href="/reports">
+    <ProjectLink className={sidebarItemClassName} exact={false} href="/reports">
       <SidebarIcon icon={ChartLineIcon} />
-      <div className="flex-1 truncate">Report</div>
+      <div className="flex-1 truncate">Reports</div>
       <SidebarKbd>⌘I</SidebarKbd>
     </ProjectLink>
   );

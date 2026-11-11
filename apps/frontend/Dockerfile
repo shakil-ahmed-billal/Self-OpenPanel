@@ -75,27 +75,7 @@ WORKDIR /app/apps/frontend
 
 COPY --from=build --chown=node:node /app/apps/frontend/.output ./.output
 
-# The standalone Nitro output preserves the target package name for the
-# esm-env -> esm-env-runtime override. @number-flow/react imports "esm-env"
-# at runtime, so keep that package name resolvable inside the SSR bundle.
-RUN set -eux; \
-    node_modules="/app/apps/frontend/.output/server/node_modules"; \
-    test -d "${node_modules}/esm-env-runtime"; \
-    if [ ! -d "${node_modules}/esm-env" ]; then \
-        mkdir -p "${node_modules}/esm-env"; \
-        cp "${node_modules}/esm-env-runtime/node.js" "${node_modules}/esm-env/index.js"; \
-        printf '%s\n' \
-            '{' \
-            '  "name": "esm-env",' \
-            '  "version": "1.1.4",' \
-            '  "type": "module",' \
-            '  "exports": "./index.js"' \
-            '}' \
-            > "${node_modules}/esm-env/package.json"; \
-    fi; \
-    chown -R node:node "${node_modules}/esm-env"; \
-    cd /app/apps/frontend/.output/server; \
-    node --input-type=module -e 'const assert = await import("node:assert/strict"); const env = await import("esm-env"); assert.equal(env.BROWSER, false, "esm-env BROWSER should be false in the Node SSR runtime"); assert.equal(env.NODE, true, "esm-env NODE should be true in the Node SSR runtime"); assert.equal(env.DEV, false, "esm-env DEV should be false in the production runtime");'
+# vite.config.ts includes `esm-env` in `ssr.noExternal`, so Nitro bundles it directly.
 
 # The SSR server reads `.output` and writes nothing. `node` (uid 1000) is
 # created by the base image.

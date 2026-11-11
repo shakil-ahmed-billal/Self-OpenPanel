@@ -32,6 +32,7 @@ export default function MoveReport({ reportId, dashboardId }: MoveReportProps) {
       onError: handleError,
       onSuccess() {
         queryClient.invalidateQueries(trpc.report.list.pathFilter());
+        queryClient.invalidateQueries(trpc.report.listAll.pathFilter());
         queryClient.invalidateQueries(trpc.dashboard.list.pathFilter());
         toast('Report moved');
         popModal();
