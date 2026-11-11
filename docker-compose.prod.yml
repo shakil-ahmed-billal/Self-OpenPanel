@@ -112,20 +112,41 @@ services:
       SELF_HOSTED: "true"
       AUTOMATIC_MIGRATIONS: "true"
       API_PORT: "3000"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@openpanel-postgres:5432/${POSTGRES_DB:-openpanel}?schema=public
       DATABASE_URL_DIRECT: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@openpanel-postgres:5432/${POSTGRES_DB:-openpanel}?schema=public
-      REDIS_URL: redis://openpanel-redis:6379
-      CLICKHOUSE_URL: http://openpanel-clickhouse:8123/openpanel
+      REDIS_URL: ${REDIS_URL:-redis://openpanel-redis:6379}
+      CLICKHOUSE_URL: ${CLICKHOUSE_URL:-http://openpanel-clickhouse:8123/openpanel}
+      CLICKHOUSE_CLUSTER: ${CLICKHOUSE_CLUSTER:-false}
+      KAFKA_CLIENT_ID: ${KAFKA_CLIENT_ID:-openpanel}
       KAFKA_BROKERS: ${KAFKA_BROKERS:-openpanel-redpanda:9092}
+      KAFKA_EVENTS_TOPIC: ${KAFKA_EVENTS_TOPIC:-events}
+      KAFKA_CONSUMER_GROUP: ${KAFKA_CONSUMER_GROUP:-openpanel-events}
       DASHBOARD_URL: ${DASHBOARD_URL:-https://analytics.naxtbrand.com}
       API_URL: ${API_URL:-https://op-api.naxtbrand.com}
       API_CORS_ORIGINS: ${API_CORS_ORIGINS:-https://analytics.naxtbrand.com}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
       COOKIE_SECRET: ${COOKIE_SECRET:?COOKIE_SECRET is required}
+      CUSTOM_COOKIE_DOMAIN: ${CUSTOM_COOKIE_DOMAIN:-}
+      COOKIE_TLDS: ${COOKIE_TLDS:-}
       ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
       ALLOW_INVITATION: ${ALLOW_INVITATION:-true}
       DISABLE_FAVICON_FETCH: ${DISABLE_FAVICON_FETCH:-false}
+      DISABLE_BULLBOARD: ${DISABLE_BULLBOARD:-false}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+      GSC_GOOGLE_REDIRECT_URI: ${GSC_GOOGLE_REDIRECT_URI:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      GITHUB_REDIRECT_URI: ${GITHUB_REDIRECT_URI:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:3000/healthcheck || exit 1"]
       interval: 15s
@@ -153,17 +174,30 @@ services:
       SELF_HOSTED: "true"
       AUTOMATIC_MIGRATIONS: "true"
       API_PORT: "3000"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@openpanel-postgres:5432/${POSTGRES_DB:-openpanel}?schema=public
       DATABASE_URL_DIRECT: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@openpanel-postgres:5432/${POSTGRES_DB:-openpanel}?schema=public
-      REDIS_URL: redis://openpanel-redis:6379
-      CLICKHOUSE_URL: http://openpanel-clickhouse:8123/openpanel
+      REDIS_URL: ${REDIS_URL:-redis://openpanel-redis:6379}
+      CLICKHOUSE_URL: ${CLICKHOUSE_URL:-http://openpanel-clickhouse:8123/openpanel}
+      CLICKHOUSE_CLUSTER: ${CLICKHOUSE_CLUSTER:-false}
+      KAFKA_CLIENT_ID: ${KAFKA_CLIENT_ID:-openpanel}
       KAFKA_BROKERS: ${KAFKA_BROKERS:-openpanel-redpanda:9092}
+      KAFKA_EVENTS_TOPIC: ${KAFKA_EVENTS_TOPIC:-events}
+      KAFKA_CONSUMER_GROUP: ${KAFKA_CONSUMER_GROUP:-openpanel-events}
       DASHBOARD_URL: ${DASHBOARD_URL:-https://analytics.naxtbrand.com}
       API_URL: ${API_URL:-https://op-api.naxtbrand.com}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
       COOKIE_SECRET: ${COOKIE_SECRET:?COOKIE_SECRET is required}
       DISABLE_FAVICON_FETCH: ${DISABLE_FAVICON_FETCH:-false}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+      GSC_GOOGLE_REDIRECT_URI: ${GSC_GOOGLE_REDIRECT_URI:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:3000/healthz/ready || exit 1"]
       interval: 15s
@@ -188,7 +222,8 @@ services:
       PORT: "3000"
       DASHBOARD_URL: ${DASHBOARD_URL:-https://analytics.naxtbrand.com}
       API_URL: ${API_URL:-https://op-api.naxtbrand.com}
-      API_URL_SSR: http://openpanel-api:3000
+      API_URL_SSR: ${API_URL_SSR:-http://openpanel-api:3000}
+      MAINTENANCE: ${MAINTENANCE:-0}
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:3000/api/healthcheck || exit 1"]
       interval: 15s
