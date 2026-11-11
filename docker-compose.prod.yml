@@ -3,7 +3,7 @@ services:
     image: postgres:16
     restart: unless-stopped
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - openpanel_postgres_data:/var/lib/postgresql/data
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
@@ -21,7 +21,7 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--maxmemory-policy", "noeviction"]
     volumes:
-      - redis_data:/data
+      - openpanel_redis_data:/data
     healthcheck:
       test: ["CMD-SHELL", "redis-cli ping"]
       interval: 10s
@@ -37,7 +37,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     volumes:
-      - clickhouse_data:/var/lib/clickhouse
+      - openpanel_clickhouse_data:/var/lib/clickhouse
     environment:
       CLICKHOUSE_DB: openpanel
       CLICKHOUSE_SKIP_USER_SETUP: 1
@@ -73,7 +73,7 @@ services:
       - --mode=dev-container
       - --default-log-level=info
     volumes:
-      - redpanda_data:/var/lib/redpanda/data
+      - openpanel_redpanda_data:/var/lib/redpanda/data
     healthcheck:
       test: ["CMD-SHELL", "rpk cluster health -X admin.hosts=localhost:9644 | grep -q 'Healthy:.*true'"]
       interval: 10s
@@ -200,10 +200,10 @@ services:
       - dokploy-network
 
 volumes:
-  postgres_data:
-  redis_data:
-  clickhouse_data:
-  redpanda_data:
+  openpanel_postgres_data:
+  openpanel_redis_data:
+  openpanel_clickhouse_data:
+  openpanel_redpanda_data:
 
 networks:
   internal:
