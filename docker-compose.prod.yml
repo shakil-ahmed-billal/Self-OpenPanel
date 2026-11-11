@@ -1,0 +1,176 @@
+services:
+  op-db:
+    image: postgres:16
+    restart: unless-stopped
+    volumes:
+      - op_db_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-openpanel}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-openpanel}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+
+  op-kv:
+    image: redis:alpine
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - op_kv_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+
+  op-ch:
+    image: openpanel-clickhouse:latest
+    build:
+      context: ./docker/clickhouse
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    volumes:
+      - op_ch_data:/var/lib/clickhouse
+    environment:
+      CLICKHOUSE_DB: openpanel
+      CLICKHOUSE_SKIP_USER_SETUP: 1
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", 'clickhouse-client --query "SELECT 1"']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+
+  op-api:
+    image: openpanel-api:latest
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      args:
+        DATABASE_URL: postgresql://postgres:postgres@op-db:5432/openpanel?schema=public
+    restart: unless-stopped
+    command: >
+      sh -c "
+        echo 'Running database migrations...'
+        cd /app/packages/db && prisma migrate deploy &&
+        cd /app/apps/api && bun run src/main.ts
+      "
+    depends_on:
+      op-db:
+        condition: service_healthy
+      op-kv:
+        condition: service_healthy
+      op-ch:
+        condition: service_healthy
+    environment:
+      ROLE: api
+      NODE_ENV: production
+      SELF_HOSTED: "true"
+      AUTOMATIC_MIGRATIONS: "true"
+      API_PORT: "3000"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@op-db:5432/${POSTGRES_DB:-openpanel}?schema=public
+      DATABASE_URL_DIRECT: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@op-db:5432/${POSTGRES_DB:-openpanel}?schema=public
+      REDIS_URL: redis://op-kv:6379
+      CLICKHOUSE_URL: http://op-ch:8123/openpanel
+      DASHBOARD_URL: ${DASHBOARD_URL:-https://analytics.naxtbrand.com}
+      API_URL: ${API_URL:-https://op-api.naxtbrand.com}
+      API_CORS_ORIGINS: ${API_CORS_ORIGINS:-https://analytics.naxtbrand.com}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
+      COOKIE_SECRET: ${COOKIE_SECRET:?COOKIE_SECRET is required}
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
+      ALLOW_INVITATION: ${ALLOW_INVITATION:-true}
+      DISABLE_FAVICON_FETCH: ${DISABLE_FAVICON_FETCH:-false}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/healthcheck || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - internal
+      - dokploy-network
+
+  op-worker:
+    image: openpanel-api:latest
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      args:
+        DATABASE_URL: postgresql://postgres:postgres@op-db:5432/openpanel?schema=public
+    restart: unless-stopped
+    depends_on:
+      op-api:
+        condition: service_healthy
+    environment:
+      ROLE: worker
+      NODE_ENV: production
+      SELF_HOSTED: "true"
+      AUTOMATIC_MIGRATIONS: "true"
+      API_PORT: "3000"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@op-db:5432/${POSTGRES_DB:-openpanel}?schema=public
+      DATABASE_URL_DIRECT: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@op-db:5432/${POSTGRES_DB:-openpanel}?schema=public
+      REDIS_URL: redis://op-kv:6379
+      CLICKHOUSE_URL: http://op-ch:8123/openpanel
+      DASHBOARD_URL: ${DASHBOARD_URL:-https://analytics.naxtbrand.com}
+      API_URL: ${API_URL:-https://op-api.naxtbrand.com}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
+      COOKIE_SECRET: ${COOKIE_SECRET:?COOKIE_SECRET is required}
+      DISABLE_FAVICON_FETCH: ${DISABLE_FAVICON_FETCH:-false}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/healthz/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - internal
+
+  op-dashboard:
+    image: openpanel-dashboard:latest
+    build:
+      context: .
+      dockerfile: apps/start/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      op-api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      SELF_HOSTED: "true"
+      PORT: "3000"
+      DASHBOARD_URL: ${DASHBOARD_URL:-https://analytics.naxtbrand.com}
+      API_URL: ${API_URL:-https://op-api.naxtbrand.com}
+      API_URL_SSR: http://op-api:3000
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/healthcheck || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - internal
+      - dokploy-network
+
+volumes:
+  op_db_data:
+  op_kv_data:
+  op_ch_data:
+
+networks:
+  internal:
+  dokploy-network:
+    external: true
