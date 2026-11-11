@@ -18,5 +18,9 @@ export default defineConfig([
     splitting: false,
     sourcemap: false,
     minify: true,
+    define: {
+      'process.env.WEB_VERSION': JSON.stringify(process.env.WEB_VERSION || '1.4.4'),
+      'process.env.SDK_VERSION': JSON.stringify(process.env.SDK_VERSION || '1.3.4'),
+    },
   },
 ]);
