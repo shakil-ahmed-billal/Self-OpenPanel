@@ -21,7 +21,7 @@ describe('the Bun pin (ADR-016 rule 5)', () => {
 
   it('matches the Dockerfile ARG BUN_VERSION', () => {
     const dockerfile = readFileSync(
-      join(REPO_ROOT, 'apps/api/Dockerfile'),
+      join(REPO_ROOT, 'apps/backend/Dockerfile'),
       'utf8'
     );
     const match = dockerfile.match(/^ARG BUN_VERSION=(\S+)$/m);
@@ -40,9 +40,9 @@ describe('the Bun pin (ADR-016 rule 5)', () => {
     expect(result.stdout.toString()).toContain(pinned);
   });
 
-  it('apps/api logs the running Bun version at boot', () => {
+  it('apps/backend logs the running Bun version at boot', () => {
     const mainTs = readFileSync(
-      join(REPO_ROOT, 'apps/api/src/main.ts'),
+      join(REPO_ROOT, 'apps/backend/src/main.ts'),
       'utf8'
     );
     expect(mainTs).toMatch(/Bun\.version/);

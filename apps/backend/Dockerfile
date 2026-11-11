@@ -68,24 +68,24 @@ RUN bun run codegen
 # generated output survives, with every node_modules removed first: a `--production` install must be production-only
 # from the start, not a filtered view of a devDependency-laden tree.
 #
-# `--filter '@openpanel/api'` is the closure boundary: it follows `workspace:` edges transitively (api -> core -> db ->
+# `--filter '@openpanel/backend'` is the closure boundary: it follows `workspace:` edges transitively (backend -> core -> db ->
 # redis) and installs nothing outside them. A filter that matches nothing leaves the app unable to
-# resolve its imports, which tooling/gates/p13-images.sh catches by booting the image.
+# resolve its imports, which p13-images checks by booting the image.
 FROM build AS prod-deps
 
 RUN find . -maxdepth 4 -type d -name node_modules -prune -exec rm -rf {} + && \
-    bun install --production --frozen-lockfile --linker=isolated --filter '@openpanel/api'
+    bun install --production --frozen-lockfile --linker=isolated --filter '@openpanel/backend'
 
 # TRIM — cuts that run HERE, in a build stage, never in the runtime stage: deleting a file in the final stage adds a
 # whiteout and makes the image LARGER, so a removal only shrinks anything if the bytes are never COPYed forward.
 #
 #   1. The musl-only native store entries. The base is glibc, so a package whose name says `musl` is dead on every
 #      arch this image is built for; the glob is arch-independent (an arm64 build resolves `-linux-arm64`).
-#   2/3. apps/api/scripts (two mock fixtures, 15.5 MB, only used by the non-production `test:manage` script) and
-#      apps/api/e2e. Removed here rather than by splitting the COPY below, which keeps that COPY drift-proof.
+#   2/3. apps/backend/scripts (mock fixtures, only used by the non-production `test:manage` script) and
+#      apps/backend/e2e. Removed here rather than by splitting the COPY below, which keeps that COPY drift-proof.
 #   4. `*.test.ts` under packages/. packages/sdks stays since it is lightweight and kept for SDK info.
 RUN find /app/node_modules/.bun -maxdepth 1 -name '*musl*' -prune -exec rm -rf {} + && \
-    rm -rf /app/apps/api/scripts /app/apps/api/e2e && \
+    rm -rf /app/apps/backend/scripts /app/apps/backend/e2e && \
     find /app/packages -type f -name '*.test.ts' -delete
 
 # PRISMA-CLI — the Prisma CLI the start command runs (`prisma migrate deploy`), with its engines, installed on its own
@@ -124,10 +124,10 @@ COPY --from=prod-deps --chown=bun:bun /app/package.json ./
 COPY --from=prod-deps --chown=bun:bun /app/node_modules ./node_modules
 
 # Apps — src/ is the artifact; there is no dist/.
-COPY --from=prod-deps --chown=bun:bun /app/apps/api ./apps/api
+COPY --from=prod-deps --chown=bun:bun /app/apps/backend ./apps/backend
 
 COPY --from=prod-deps --chown=bun:bun /app/packages ./packages
-COPY --from=prod-deps --chown=bun:bun /app/tooling/typescript ./tooling/typescript
+COPY --from=prod-deps --chown=bun:bun /app/packages/tsconfig ./packages/tsconfig
 
 COPY --from=prisma-cli --chown=bun:bun /opt/prisma /opt/prisma
 
@@ -145,7 +145,7 @@ RUN prisma --version >/dev/null && \
 
 USER bun
 
-WORKDIR /app/apps/api
+WORKDIR /app/apps/backend
 
 EXPOSE 3000
 

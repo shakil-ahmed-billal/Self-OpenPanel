@@ -4,7 +4,7 @@
 # Runs once per test FILE under `--isolate`, not once per run — `bun test` has
 # no `globalSetup`. The preload is the successor to `test/global-setup.ts`:
 # it pins DATABASE_URL / CLICKHOUSE_URL at the ISOLATED test databases and
-# bootstraps them. Shared with apps/api; both must stay idempotent.
+# bootstraps them. Shared with apps/backend; both must stay idempotent.
 preload = ["../../test/bun-preload.ts"]
 
 # --isolate is chosen deliberately (ADR-010) and it CANNOT be set here: on Bun

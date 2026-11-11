@@ -1,5 +1,5 @@
 /**
- * `bun test` preload for `packages/db` and `apps/api`.
+ * `bun test` preload for `packages/db` and `apps/backend`.
  *
  * 1. Pin the infrastructure URLs at the ISOLATED test databases (`test/databases.ts`): no test may reach the
  *    application's own `openpanel` databases, where fixture teardown would mutate real data.

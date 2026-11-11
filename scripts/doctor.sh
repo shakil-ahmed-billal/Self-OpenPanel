@@ -37,7 +37,7 @@ check_bun_version() {
   if [[ "$actual" == "$pinned" ]]; then
     pass "bun $actual matches the pinned version ($pinned)"
   else
-    fail "bun $actual does not match the pinned version $pinned (ADR-016) — install $pinned, or bump .bun-version deliberately alongside apps/api/Dockerfile's ARG BUN_VERSION"
+    fail "bun $actual does not match the pinned version $pinned (ADR-016) — install $pinned, or bump .bun-version deliberately alongside apps/backend/Dockerfile's ARG BUN_VERSION"
   fi
 }
 

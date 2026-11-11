@@ -198,14 +198,19 @@ WORKTREE.md
 
 # seed output and playwright auth state
 .seed.json
-apps/start/e2e/.auth/
+apps/frontend/e2e/.auth/
 
 # playwright output
-apps/start/test-results/
-apps/start/playwright-report/
+apps/frontend/test-results/
+apps/frontend/playwright-report/
 # Playwright MCP scratch: console logs, page snapshots and screenshots, written
-# at the repo root by the MCP server rather than under apps/start.
+# at the repo root by the MCP server rather than under apps/frontend.
 .playwright-mcp/
+
+# turborepo cache & nitro build output
+.turbo/
+apps/frontend/.output/
+apps/frontend/.nitro/
 
 # SQL dumps the ClickHouse code-migration runner writes next to each migration
 packages/db/src/code-migrations/*.sql

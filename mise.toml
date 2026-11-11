@@ -10,7 +10,7 @@
 # machine ends up on a version scripts/doctor.sh then rejects.
 #
 # So four files now carry the bun version — here, .bun-version, and the
-# ARG BUN_VERSION in apps/api/Dockerfile and apps/start/Dockerfile. doctor.sh
+# ARG BUN_VERSION in apps/backend/Dockerfile and apps/frontend/Dockerfile. doctor.sh
 # compares the running bun against .bun-version, which catches the two that
 # matter to a developer; keep the rest in step when bumping.
 

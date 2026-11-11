@@ -16,12 +16,12 @@ Open-source product analytics (a Mixpanel alternative). Bun monorepo.
 | Path | What | Stack |
 |---|---|---|
 | `packages/core` | The backend: every module, the tRPC router, Elysia routes, BullMQ jobs, ingest | TypeScript |
-| `apps/api` | Thin shell that mounts core; `ROLE=api\|worker\|all` picks what one process runs | Elysia on Bun |
-| `apps/start` | The dashboard | TanStack Start, React 19, Redux Toolkit, Tailwind v4, Recharts |
+| `apps/backend` | Thin shell that mounts core; `ROLE=api\|worker\|all` picks what one process runs | Elysia on Bun |
+| `apps/frontend` | The dashboard | TanStack Start, React 19, Redux Toolkit, Tailwind v4, Recharts |
 | `packages/db` | Prisma (Postgres) + ClickHouse client and the `sql` tag (`src/clickhouse/sql.ts`) | |
 | `packages/seed` | Deterministic seed data for Postgres + ClickHouse (`bun run seed`) | |
-| `packages/redis`, `packages/email`, `packages/payments`, `packages/sdks/*` | Redis client/locks/pubsub, React Email, billing, client SDKs | |
-| `apps/public` | Marketing + docs; the look and page recipe are in `apps/public/DESIGN.md` | Next.js, Fumadocs |
+| `packages/redis`, `packages/sdks/*` | Redis client/locks/pubsub, client SDKs | |
+| `packages/tsconfig`, `packages/shared`, `packages/logos` | Shared TS presets, isomorphic utilities, device/browser logos | |
 
 Data flow: SDK → `POST /track` (`packages/core/src/modules/ingest`) → Kafka → the
 worker role → ClickHouse (`events`, `sessions`, `profiles`, materialized views).
@@ -37,7 +37,7 @@ supervised for you.
 - **Supervised processes**: `WORKTREE.md` gives the log files and the exact restart
   command. Prefer restarting over starting your own copy — two processes on one port is
   the usual cause of "my change does nothing". If the supervisor is gone, your shell has
-  the same env it used, so `bun run --filter @openpanel/api dev` (or `start`) starts a
+  the same env it used, so `bun run --filter @openpanel/backend dev` (or `start`) starts a
   process on the right port. `tail -f` the log while you test.
 - Env is injected into your shell and wins over `.env`; `.env` in a worktree is a copy of
   the main checkout's and mostly irrelevant.
@@ -47,9 +47,9 @@ supervised for you.
   created and seeded).
 
 Without `WORKTREE.md` you are in a plain checkout: `.env` applies, `bun run dock:up`
-starts Postgres/Redis/ClickHouse/Redpanda, and `bun run dev` starts api + dashboard.
+starts Postgres/Redis/ClickHouse/Redpanda, and `bun run dev` starts backend + frontend.
 The dashboard's server side runs under the Cloudflare Vite plugin, which reads
-`apps/start/.env.local` (and wrangler `vars`) rather than your shell — set `API_URL` and
+`apps/frontend/.env.local` (and wrangler `vars`) rather than your shell — set `API_URL` and
 `DASHBOARD_URL` there, or export `CLOUDFLARE_INCLUDE_PROCESS_ENV=true` to make it use
 the shell env.
 
@@ -76,10 +76,10 @@ a one-line fix does not need the full suite, a query or ingest change always doe
 
 | You changed | Verify with | Also run |
 |---|---|---|
-| Dashboard UI (`apps/start`) | Open `$DASHBOARD_URL` with the Playwright MCP if you have one (`browser_*` tools; the local HTTPS certificate is self-signed, ignore that), log in with `.seed.json`, use the feature, **take a screenshot** (`browser_take_screenshot`; you get the image back — look at it) | `bunx vitest run` in `apps/start`, then add/adjust a spec in `apps/start/e2e/` and `bun run e2e` |
+| Dashboard UI (`apps/frontend`) | Open `$DASHBOARD_URL` with the Playwright MCP if you have one (`browser_*` tools; the local HTTPS certificate is self-signed, ignore that), log in with `.seed.json`, use the feature, **take a screenshot** (`browser_take_screenshot`; you get the image back — look at it) | `bunx vitest run` in `apps/frontend`, then add/adjust a spec in `apps/frontend/e2e/` and `bun run e2e` |
 | tRPC procedure / REST route (`packages/core`) | Call it (recipes below) with seeded ids and check the JSON; for auth changes, try the wrong role too | `bun test --isolate` in `packages/core` for that module |
 | ClickHouse query / chart / overview | Run old and new against the seeded data and diff results; check the numbers on the dashboard match a manual query | `packages/core` tests for the module; `bun run --filter @openpanel/db test` if you touched `packages/db` |
-| Ingest / worker / buffers / sessions | `bun run send journey --project acme-shop` (live events through Kafka → worker → ClickHouse), then query `events`/`sessions`/`profiles` for that session id | `packages/core` ingest + buffer tests, `apps/api/e2e/` for session lifecycle |
+| Ingest / worker / buffers / sessions | `bun run send journey --project acme-shop` (live events through Kafka → worker → ClickHouse), then query `events`/`sessions`/`profiles` for that session id | `packages/core` ingest + buffer tests, `apps/backend/e2e/` for session lifecycle |
 | SDK (`packages/sdks/*`) | `/sdk-testbed`: drive `apps/testbed` in a real browser against *your* API and read the rows in ClickHouse (`bun run --filter @openpanel/testbed e2e`); extend the spec for new behaviour | `bun run --filter @openpanel/web test`, `bun run --filter "./packages/sdks/*" typecheck`; a release goes through the SDKs workflow (`.github/workflows/sdks.yml`) |
 | MCP tools (`packages/core/src/modules/mcp`) | Call the product's MCP against *your* API and data: as the `openpanel` MCP server if one is configured for you, else over HTTP (`.seed.json` → `mcp.url`, recipe below); compare its answer with a direct query | `packages/core` mcp tests |
 | Schema / migration | `bun run --filter @openpanel/db migrate:deploy` on your isolated database, then `bun run seed --reset` and the seed tests (`bun run --filter @openpanel/seed test`) | `bun run typecheck` |
@@ -124,7 +124,7 @@ curl -sS -X POST "$MCP_URL" -H 'content-type: application/json' -H 'accept: appl
 ```
 
 Payload shapes for `/track` are in `packages/core/src/modules/ingest/ingest.constants.ts`.
-`apps/api/e2e/` is an HTTP harness for session-lifecycle stress tests.
+`apps/backend/e2e/` is an HTTP harness for session-lifecycle stress tests.
 
 ### Splitting verification across sub-agents
 
@@ -140,12 +140,12 @@ you do that, before they start. Merge their reports into yours; do not forward t
 - A backend module is `packages/core/src/modules/<name>/` with `<name>.rpc.ts`
   (tRPC), `.routes.ts` (REST), `.jobs.ts` (BullMQ), `.service.ts`, `.constants.ts`
   (zod schemas + constants, safe to import from the frontend). `Cmd+P report.service`.
-- Dashboard routes: `apps/start/src/routes/` (TanStack file routing); modals in
+- Dashboard routes: `apps/frontend/src/routes/` (TanStack file routing); modals in
   `src/modals/`; tRPC client in `src/integrations/tanstack-query/`.
 - ClickHouse queries use the `sql` tag from `@openpanel/db` (`packages/db/src/clickhouse/sql.ts`).
   Table names: `packages/db/src/clickhouse/client.ts` (`TABLE_NAMES`). Schema: the
   numbered files in `packages/db/src/code-migrations/`; a flat copy is `test/clickhouse-schema.sql`.
-- Env schema: `apps/api/src/config/env.ts`. Auth: `packages/core/src/modules/auth/`.
+- Env schema: `apps/backend/src/config/env.ts`. Auth: `packages/core/src/modules/auth/`.
 - The write path (what ends up in ClickHouse): `packages/core/src/modules/event/event.service.ts`
   (`createEvent`), `packages/core/src/buffers/session-buffer.ts`, `profile-buffer.ts`.
 

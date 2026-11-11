@@ -53,11 +53,16 @@ export default {
   // port = 21000 + block×100 + offset. Main checkout is block 0.
   processes: {
     // host: label in front of `<name>.<suffix>`; null is the bare `<name>.<suffix>`.
-    web: { host: null, offset: 0, cmd: 'bun run --filter start dev', cwd: '.' },
+    web: {
+      host: null,
+      offset: 0,
+      cmd: 'bun run --filter @openpanel/frontend dev',
+      cwd: '.',
+    },
     api: {
       host: 'api',
       offset: 1,
-      cmd: 'bun run --filter @openpanel/api dev',
+      cmd: 'bun run --filter @openpanel/backend dev',
       cwd: '.',
     },
     studio: {

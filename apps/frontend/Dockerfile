@@ -3,15 +3,15 @@
 # Almost nothing of this image is ours: 84.5% is `node:${NODE_VERSION}-slim` (the Node runtime alone is 53%) and the
 # application `.output` is 9 MB, so the only cuts available are the two apt ones below.
 #
-# The install is ONE FULL WORKSPACE INSTALL, not a list of member manifests: `apps/start` imports
+# The install is ONE FULL WORKSPACE INSTALL, not a list of member manifests: `apps/frontend` imports
 # `@openpanel/core/modules/*.constants`, and `vite-tsconfig-paths` then reads `packages/core/tsconfig.json`, whose
-# `"extends": "@openpanel/tsconfig/base.json"` cannot resolve unless `tooling/typescript` is installed as a workspace member.
+# `"extends": "@openpanel/tsconfig/base.json"` cannot resolve unless `packages/tsconfig` is installed as a workspace member.
 ARG BUN_VERSION=1.4.4
 ARG NODE_VERSION=24.22.1
 
 # MANIFESTS — only what `bun install` reads (every `package.json`, the lockfile, `bunfig.toml`, the patches), cut out
 # of the whole tree with `find` so the list cannot drift. Its output only changes when a manifest does, which keeps
-# the install layer below cached across source-only changes. Same stage as apps/api/Dockerfile's.
+# the install layer below cached across source-only changes. Same stage as apps/backend/Dockerfile's.
 FROM oven/bun:${BUN_VERSION}-slim AS manifests
 
 WORKDIR /app
@@ -44,13 +44,13 @@ COPY . .
 # preset over the Cloudflare one; SELF_HOSTED=1 is read at build time.
 #
 # No codegen step: the build succeeds with `packages/db/src/generated` absent, because every `@openpanel/db` import in
-# apps/start is `import type` and the `@openpanel/core` imports are all `*.constants` subpaths.
+# apps/frontend is `import type` and the `@openpanel/core` imports are all `*.constants` subpaths.
 FROM install AS build
 
 ENV NITRO=1
 ENV SELF_HOSTED=1
 
-RUN cd apps/start && NITRO=1 SELF_HOSTED=1 bun run build
+RUN cd apps/frontend && NITRO=1 SELF_HOSTED=1 bun run build
 
 # RUNNER — node:${NODE_VERSION}-slim, and only `.output`.
 #
@@ -71,15 +71,15 @@ RUN apt-get update && \
     && apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app/apps/start
+WORKDIR /app/apps/frontend
 
-COPY --from=build --chown=node:node /app/apps/start/.output ./.output
+COPY --from=build --chown=node:node /app/apps/frontend/.output ./.output
 
 # The standalone Nitro output preserves the target package name for the
 # esm-env -> esm-env-runtime override. @number-flow/react imports "esm-env"
 # at runtime, so keep that package name resolvable inside the SSR bundle.
 RUN set -eux; \
-    node_modules="/app/apps/start/.output/server/node_modules"; \
+    node_modules="/app/apps/frontend/.output/server/node_modules"; \
     test -d "${node_modules}/esm-env-runtime"; \
     if [ ! -d "${node_modules}/esm-env" ]; then \
         mkdir -p "${node_modules}/esm-env"; \
@@ -94,7 +94,7 @@ RUN set -eux; \
             > "${node_modules}/esm-env/package.json"; \
     fi; \
     chown -R node:node "${node_modules}/esm-env"; \
-    cd /app/apps/start/.output/server; \
+    cd /app/apps/frontend/.output/server; \
     node --input-type=module -e 'const assert = await import("node:assert/strict"); const env = await import("esm-env"); assert.equal(env.BROWSER, false, "esm-env BROWSER should be false in the Node SSR runtime"); assert.equal(env.NODE, true, "esm-env NODE should be true in the Node SSR runtime"); assert.equal(env.DEV, false, "esm-env DEV should be false in the production runtime");'
 
 # The SSR server reads `.output` and writes nothing. `node` (uid 1000) is

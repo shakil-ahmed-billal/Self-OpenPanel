@@ -1,5 +1,5 @@
 {
-  "name": "start",
+  "name": "@openpanel/frontend",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,6 +12,7 @@
     "lint": "biome lint",
     "check": "biome check",
     "typecheck": "tsc --noEmit",
+    "clean": "rm -rf .output .nitro dist",
     "with-env": "dotenv -e ../../.env -c --"
   },
   "dependencies": {

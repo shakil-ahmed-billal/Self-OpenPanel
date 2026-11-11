@@ -7,7 +7,7 @@
  *  - core-layers-*: one rule per layer boundary.
  *  - constants-stay-isomorphic: a `*.constants.ts` file depends on nothing but zod, another constants file or a
  *    type-only specifier.
- *  - frontend-values-only-constants: a web app (apps/start, apps/public, packages/sdks/*) may only VALUE-import
+ *  - frontend-values-only-constants: a web app (apps/frontend, apps/public, packages/sdks/*) may only VALUE-import
  *    @openpanel/core or @openpanel/db through a `*.constants.ts` path.
  *  - shared-root-stays-isomorphic: nothing reachable from @openpanel/shared's root imports a node: builtin or server/.
  *  - no-web-to-server: a web app may not import @openpanel/shared/server.
@@ -45,7 +45,7 @@ const LAYERS_COMMENT =
   'instead.';
 
 // The web tier: everything that ends up in a browser bundle.
-const FRONTENDS = '^(apps/(start|public)|packages/sdks/)';
+const FRONTENDS = '^(apps/(frontend|public)|packages/sdks/)';
 
 // The composition root and everything above it.
 const COMPOSITION_AND_ABOVE =
@@ -194,12 +194,12 @@ module.exports = {
       name: 'frontend-values-only-constants',
       severity: 'error',
       comment:
-        'A web app (apps/start, apps/public, packages/sdks/*) value-imports ' +
+        'A web app (apps/frontend, apps/public, packages/sdks/*) value-imports ' +
         '@openpanel/core or @openpanel/db only through a *.constants.ts path. Everything ' +
         'else must be `import type`, which is erased, so no server code reaches a browser ' +
         'bundle. @openpanel/shared is not in the TO list: its root entrypoint is meant for ' +
         'browsers, and shared-root-stays-isomorphic keeps that safe. check:deps only ' +
-        'cruises apps/start and packages, so the apps/public part of this rule is not ' +
+        'cruises apps/frontend and packages, so the apps/public part of this rule is not ' +
         'checked until that command names it.',
       from: { path: FRONTENDS },
       to: {

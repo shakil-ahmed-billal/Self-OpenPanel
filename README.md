@@ -105,7 +105,7 @@ You can find the how to [here](https://openpanel.dev/docs/self-hosting/self-host
 ```bash
 bun install
 cp .env.example .env
-echo "API_URL=http://localhost:3333" > apps/start/.env
+echo "API_URL=http://localhost:3333" > apps/frontend/.env
 
 bun run dock:up
 bun run codegen

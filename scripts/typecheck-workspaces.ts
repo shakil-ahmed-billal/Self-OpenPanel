@@ -9,7 +9,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { cpus } from 'node:os';
 import { join } from 'node:path';
 
-const REPO_ROOT = join(import.meta.dir, '..', '..');
+const REPO_ROOT = join(import.meta.dir, '..');
 const ROOT_MANIFEST = join(REPO_ROOT, 'package.json');
 const TYPECHECK_SCRIPT = 'typecheck';
 const DEFAULT_CONCURRENCY = 4;
@@ -34,7 +34,7 @@ const readManifest = (path: string): Record<string, unknown> | null => {
   }
 };
 
-/** `apps/*` / `packages/**` / `tooling/*` — the same globs bun installs from. */
+/** `apps/*` / `packages/*` / `packages/sdks/*` — the same globs bun installs from. */
 const expandGlob = (pattern: string): string[] => {
   const segments = pattern.split('/');
   let matches = [''];

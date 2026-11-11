@@ -7,7 +7,7 @@
   },
   "files": {
     "includes": [
-      "!apps/start/src/routeTree.gen.ts",
+      "!apps/frontend/src/routeTree.gen.ts",
       "!packages/db/src/generated",
       "!packages/core/src/clients/datacenter-asns.ts"
     ]
@@ -107,7 +107,7 @@
   ],
   "overrides": [
     {
-      "includes": ["apps/start/src/**"],
+      "includes": ["apps/frontend/src/**"],
       "linter": {
         "rules": {
           "suspicious": {

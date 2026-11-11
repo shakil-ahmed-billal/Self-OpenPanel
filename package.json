@@ -5,6 +5,7 @@
   "private": true,
   "license": "MIT",
   "author": "Carl-Gerhard Lindesvärd",
+  "packageManager": "bun@1.4.4",
   "engines": {
     "bun": ">=1.4.4",
     "node": ">=24.22.1"
@@ -19,8 +20,8 @@
   "workspaces": {
     "packages": [
       "apps/*",
-      "packages/**",
-      "tooling/*"
+      "packages/*",
+      "packages/sdks/*"
     ],
     "catalog": {
       "zod": "4.6.7",
@@ -54,7 +55,7 @@
   "scripts": {
     "test": "bun run test:core && bun run test:rest",
     "test:core": "bun run --filter @openpanel/core test",
-    "test:rest": "bun run --filter @openpanel/db test && bun run --filter @openpanel/api test && bun run --filter @openpanel/seed test && bun run --filter @openpanel/web test && bun run --filter start test && vitest run",
+    "test:rest": "bun run --filter @openpanel/db test && bun run --filter @openpanel/backend test && bun run --filter @openpanel/seed test && bun run --filter @openpanel/web test && bun run --filter @openpanel/frontend test && vitest run",
     "gen:bots": "bun run --filter @openpanel/core gen:bots",
     "gen:referrers": "bun run --filter @openpanel/core gen:referrers",
     "dock:up": "docker compose up -d",
@@ -68,18 +69,26 @@
     "migrate:deploy": "bun run --filter @openpanel/db migrate:deploy",
     "seed": "bun run --filter @openpanel/seed seed --",
     "send": "bun run --filter @openpanel/seed send --",
-    "dev": "bun run --filter @openpanel/api testing & bun run --filter start dev & wait",
-    "typecheck": "bun tooling/scripts/typecheck-workspaces.ts",
+    "dev": "bun scripts/dev.mjs",
+    "dev:turbo": "turbo run dev",
+    "dev:backend": "bun run --filter @openpanel/backend dev",
+    "dev:frontend": "bun run --filter @openpanel/frontend dev",
+    "build": "turbo run build",
+    "build:backend": "turbo run build --filter=@openpanel/backend",
+    "build:frontend": "turbo run build --filter=@openpanel/frontend",
+    "typecheck": "bun scripts/typecheck-workspaces.ts",
+    "typecheck:turbo": "turbo run typecheck",
     "update-simple-git-hooks": "npx simple-git-hooks",
     "check:workspace": "bunx sherif@1.13.0",
-    "check:deps": "depcruise --config .dependency-cruiser.cjs --output-type err apps/start packages",
+    "check:deps": "depcruise --config .dependency-cruiser.cjs --output-type err apps/frontend packages",
     "check": "ultracite check && bun run check:deps",
     "lint": "ultracite check",
     "lint:format": "ultracite check --linter-enabled=false",
-    "fix": "ultracite fix"
+    "fix": "ultracite fix",
+    "clean": "turbo run clean && rm -rf apps/*/.output apps/*/.nitro apps/*/dist packages/*/dist packages/sdks/*/dist .turbo"
   },
   "simple-git-hooks": {
-    "pre-push": "sh tooling/scripts/pre-push.sh"
+    "pre-push": "sh scripts/pre-push.sh"
   },
   "dependencies": {
     "@hyperdx/node-opentelemetry": "catalog:",
@@ -92,6 +101,7 @@
     "depcheck": "1.4.7",
     "dependency-cruiser": "18.2.0",
     "simple-git-hooks": "2.12.1",
+    "turbo": "^2.4.4",
     "ultracite": "7.2.0",
     "vitest": "3.1.3"
   }

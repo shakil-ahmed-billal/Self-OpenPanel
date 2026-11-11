@@ -3,12 +3,9 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
+  "description": "Shared TypeScript configuration presets for OpenPanel",
   "files": [
     "base.json",
-    "sdk.json",
-    "tsup.config.json"
-  ],
-  "devDependencies": {
-    "tsup": "7.3.0"
-  }
+    "sdk.json"
+  ]
 }

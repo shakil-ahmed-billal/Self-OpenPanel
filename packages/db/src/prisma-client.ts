@@ -1,5 +1,6 @@
 import { PrismaClient } from './generated/prisma/client';
 import { logger } from './logger';
+import type {} from './types';
 
 export * from './generated/prisma/client';
 

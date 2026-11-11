@@ -1,5 +1,5 @@
 {
-  "name": "@openpanel/api",
+  "name": "@openpanel/backend",
   "version": "0.0.4",
   "type": "module",
   "scripts": {
@@ -14,7 +14,9 @@
     "e2e:ingest-load": "LOG_LEVEL=warn dotenv -e ../../.env -- bun e2e/ingest-load.ts",
     "e2e:legacy-jobs": "bash e2e/legacy-job-proof.sh",
     "test": "bun test --isolate",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src",
+    "clean": "rm -rf dist"
   },
   "dependencies": {
     "@openpanel/core": "workspace:*",
